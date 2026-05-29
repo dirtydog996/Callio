@@ -1,0 +1,35 @@
+# ===== 本地语音助手依赖 =====
+
+# 核心框架
+pipecat-ai>=1.2.1
+
+# Web 服务
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+websockets>=12.0
+
+# 语音合成 (TTS)
+pyttsx3>=2.90
+
+# 语音识别 (STT) - Whisper
+faster-whisper>=1.0.0
+
+# 本地 LLM - Ollama
+openai>=1.30.0  # OLLamaLLMService 使用 OpenAI 兼容接口
+
+# 二维码生成
+qrcode>=7.4.2
+pillow>=10.0.0
+
+# 环境变量
+python-dotenv>=1.0.0
+
+# 音频处理
+numpy>=1.26.0
+scipy>=1.12.0
+
+# 日志
+loguru>=0.7.0
+
+# 类型提示
+typing-extensions>=4.9.0

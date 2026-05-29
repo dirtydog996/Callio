@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地语音助手</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .status.disconnected { background: #ffcccc; color: #900; }
+        .status.connecting { background: #ffffcc; color: #990; }
+        .status.connected { background: #ccffcc; color: #090; }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #startBtn {
+            background: #4CAF50;
+            color: white;
+        }
+        #startBtn:hover:not(:disabled) {
+            background: #45a049;
+        }
+        #stopBtn {
+            background: #f44336;
+            color: white;
+        }
+        #stopBtn:hover:not(:disabled) {
+            background: #da190b;
+        }
+        .transcript {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .transcript h3 {
+            margin-top: 0;
+            color: #666;
+        }
+        .user-msg {
+            color: #2196F3;
+            margin: 10px 0;
+        }
+        .bot-msg {
+            color: #4CAF50;
+            margin: 10px 0;
+        }
+        .info {
+            text-align: center;
+            color: #666;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎙️ 本地语音助手</h1>
+
+    <div id="status" class="status disconnected">未连接</div>
+
+    <div class="controls">
+        <button id="startBtn" onclick="startSession()">开始对话</button>
+        <button id="stopBtn" onclick="stopSession()" disabled>结束对话</button>
+    </div>
+
+    <div class="transcript">
+        <h3>对话记录</h3>
+        <div id="messages"></div>
+    </div>
+
+    <div class="info">
+        <p>点击"开始对话"后，请允许使用麦克风</p>
+        <p>系统会使用本地 Whisper 进行语音识别，Ollama 进行对话生成</p>
+    </div>
+
+    <script>
+        let ws = null;
+        let mediaRecorder = null;
+        let audioContext = null;
+        let isRecording = false;
+
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+
+        function updateStatus(status, text) {
+            statusEl.className = 'status ' + status;
+            statusEl.textContent = text;
+        }
+
+        function addMessage(role, text) {
+            const div = document.createElement('div');
+            div.className = role === 'user' ? 'user-msg' : 'bot-msg';
+            div.textContent = (role === 'user' ? '👤 ' : '🤖 ') + text;
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        async function startSession() {
+            try {
+                updateStatus('connecting', '正在连接...');
+                startBtn.disabled = true;
+
+                // 连接 WebSocket
+                const wsUrl = 'ws://' + window.location.host + '/ws';
+                ws = new WebSocket(wsUrl);
+                ws.binaryType = 'arraybuffer';
+
+                ws.onopen = async () => {
+                    console.log('WebSocket connected');
+                    updateStatus('connected', '已连接 - 等待音频...');
+                    stopBtn.disabled = false;
+
+                    // 获取麦克风权限
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            sampleRate: 16000,
+                            channelCount: 1,
+                            echoCancellation: true,
+                            noiseSuppression: true
+                        }
+                    });
+
+                    // 创建音频上下文
+                    audioContext = new AudioContext({ sampleRate: 16000 });
+                    const source = audioContext.createMediaStreamSource(stream);
+                    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+                    source.connect(processor);
+                    processor.connect(audioContext.destination);
+
+                    processor.onaudioprocess = (e) => {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            const inputData = e.inputBuffer.getChannelData(0);
+                            // 将 Float32 转换为 Int16
+                            const int16Data = new Int16Array(inputData.length);
+                            for (let i = 0; i < inputData.length; i++) {
+                                int16Data[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32767));
+                            }
+                            ws.send(int16Data.buffer);
+                        }
+                    };
+
+                    isRecording = true;
+                };
+
+                ws.onmessage = (event) => {
+                    if (typeof event.data === 'string') {
+                        const data = JSON.parse(event.data);
+                        console.log('Received:', data);
+                        if (data.type === 'transcription') {
+                            addMessage('user', data.text);
+                        } else if (data.type === 'assistant') {
+                            addMessage('bot', data.text);
+                        }
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    updateStatus('disconnected', '连接错误');
+                    resetUI();
+                };
+
+                ws.onclose = () => {
+                    console.log('WebSocket closed');
+                    updateStatus('disconnected', '已断开');
+                    resetUI();
+                };
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('启动失败: ' + error.message);
+                updateStatus('disconnected', '启动失败');
+                resetUI();
+            }
+        }
+
+        function stopSession() {
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            isRecording = false;
+            resetUI();
+        }
+
+        function resetUI() {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+    </script>
+</body>
+</html>
