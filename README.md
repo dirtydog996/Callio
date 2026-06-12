@@ -4,9 +4,33 @@ Callio is a voice-first autonomous OS companion built around a modular Python se
 
 - `callio/config` — runtime settings
 - `callio/core` — FastAPI API, SQLite state, memory hub
+- `callio/web` — browser voice client (`static/index.html`)
 - `callio/voice` — Pipecat voice pipeline and tool triggers
 - `callio/worker` — async task dispatching, sandbox runner scaffolding
 - `callio/meta` — shadow rollout and sanity-check scaffolding
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CALLIO_HF_ENDPOINT` | _(empty)_ | Hugging Face mirror, e.g. `https://hf-mirror.com` for faster model downloads in China |
+| `CALLIO_WHISPER_MODEL` | `base` | Whisper model size (`base`, `small`, `medium`, etc.) |
+| `CALLIO_WHISPER_PRELOAD` | `1` | Preload Whisper at startup instead of on first WebSocket connection |
+| `CALLIO_SSL_CERT` | _(empty)_ | HTTPS certificate path (required for mobile microphone) |
+| `CALLIO_SSL_KEY` | _(empty)_ | HTTPS private key path |
+| `CALLIO_PORT` | `8000` | Server port |
+
+Whisper models are cached under `~/.cache/huggingface/hub/`. After the first download, startup only loads from the local cache.
+
+## Mobile testing (iPhone / Android)
+
+手机通过局域网 HTTP 扫码无法使用麦克风，需 HTTPS。一键启动：
+
+```bash
+./scripts/start-mobile-https.sh
+```
+
+完整说明见 **[docs/mobile-testing.md](docs/mobile-testing.md)**（mkcert / ngrok、iPhone 证书信任、常见问题）。
 
 ## Run locally
 
@@ -22,13 +46,7 @@ Start the integrated service:
 python -m callio
 ```
 
-Or use the legacy entry point:
-
-```bash
-python local.py
-```
-
-This starts the FastAPI app, mounts the static web client, registers the voice websocket route, and shows a local QR code by default.
+This starts the FastAPI app, serves the web client at `/` and `/static/index.html`, registers the voice websocket route, and prints a small QR code in the terminal by default.
 
 If you want to skip QR display:
 
@@ -63,3 +81,7 @@ from callio.app import app
 print(len(app.routes))
 PY
 ```
+
+export HF_ENDPOINT=https://hf-mirror.com
+
+export CALLIO_HF_ENDPOINT=https://hf-mirror.com

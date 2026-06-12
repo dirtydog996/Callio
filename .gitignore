@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .callio_shadow/
 callio_local.db
+certs/
+*.pem

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地语音助手</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .status.disconnected { background: #ffcccc; color: #900; }
+        .status.connecting { background: #ffffcc; color: #990; }
+        .status.connected { background: #ccffcc; color: #090; }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #startBtn {
+            background: #4CAF50;
+            color: white;
+        }
+        #startBtn:hover:not(:disabled) {
+            background: #45a049;
+        }
+        #stopBtn {
+            background: #f44336;
+            color: white;
+        }
+        #stopBtn:hover:not(:disabled) {
+            background: #da190b;
+        }
+        .transcript {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .transcript h3 {
+            margin-top: 0;
+            color: #666;
+        }
+        .user-msg {
+            color: #2196F3;
+            margin: 10px 0;
+        }
+        .bot-msg {
+            color: #4CAF50;
+            margin: 10px 0;
+        }
+        .info {
+            text-align: center;
+            color: #666;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎙️ 本地语音助手</h1>
+
+    <div id="status" class="status disconnected">未连接</div>
+
+    <div class="controls">
+        <button id="startBtn" onclick="startSession()">开始对话</button>
+        <button id="stopBtn" onclick="stopSession()" disabled>结束对话</button>
+    </div>
+
+    <div class="transcript">
+        <h3>对话记录</h3>
+        <div id="messages"></div>
+    </div>
+
+    <div class="info">
+        <p>点击"开始对话"后，请立即允许麦克风权限</p>
+        <p>iPhone 通过局域网 IP 访问时，浏览器可能拒绝麦克风；可改用 HTTPS 或在本机浏览器打开</p>
+        <p>系统会使用本地 Whisper 进行语音识别，Ollama 进行对话生成</p>
+    </div>
+
+    <script>
+        const TARGET_SAMPLE_RATE = 16000;
+
+        let ws = null;
+        let audioContext = null;
+        let mediaStream = null;
+        let audioProcessor = null;
+        let isRecording = false;
+
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+
+        function updateStatus(status, text) {
+            statusEl.className = 'status ' + status;
+            statusEl.textContent = text;
+        }
+
+        function addMessage(role, text) {
+            const div = document.createElement('div');
+            div.className = role === 'user' ? 'user-msg' : 'bot-msg';
+            div.textContent = (role === 'user' ? '👤 ' : '🤖 ') + text;
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        function floatTo16kPCM(input, inputSampleRate) {
+            let samples = input;
+            if (inputSampleRate !== TARGET_SAMPLE_RATE) {
+                const ratio = inputSampleRate / TARGET_SAMPLE_RATE;
+                const outLen = Math.floor(input.length / ratio);
+                const resampled = new Float32Array(outLen);
+                for (let i = 0; i < outLen; i++) {
+                    const pos = i * ratio;
+                    const idx = Math.floor(pos);
+                    const frac = pos - idx;
+                    const a = input[idx] || 0;
+                    const b = input[idx + 1] || a;
+                    resampled[i] = a + (b - a) * frac;
+                }
+                samples = resampled;
+            }
+
+            const int16 = new Int16Array(samples.length);
+            for (let i = 0; i < samples.length; i++) {
+                int16[i] = Math.max(-32768, Math.min(32767, samples[i] * 32767));
+            }
+            return int16.buffer;
+        }
+
+        function microphoneErrorMessage(error) {
+            const name = error && error.name ? error.name : '';
+            if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+                return '麦克风权限被拒绝。请在浏览器设置中允许此页面访问麦克风，然后重试。';
+            }
+            if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+                return '未检测到可用麦克风，请检查设备或系统麦克风设置。';
+            }
+            if (name === 'NotReadableError' || name === 'TrackStartError') {
+                return '麦克风被其他应用占用，请关闭占用麦克风的程序后重试。';
+            }
+            if (name === 'SecurityError' || name === 'NotSupportedError') {
+                return '当前访问方式不支持麦克风。iPhone 请改用 HTTPS 访问，或使用本机浏览器打开 localhost。';
+            }
+            return (error && error.message) ? error.message : '无法启动麦克风';
+        }
+
+        function ensureMicrophoneSupported() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('当前浏览器不支持麦克风访问，请更换 Chrome / Safari 后重试。');
+            }
+
+            const host = window.location.hostname;
+            const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+            if (!window.isSecureContext && !isLocalhost) {
+                console.warn('Insecure context: microphone may be blocked on iOS Safari');
+            }
+        }
+
+        async function requestMicrophone() {
+            ensureMicrophoneSupported();
+            updateStatus('connecting', '请允许使用麦克风...');
+            mediaStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+        }
+
+        function startAudioPipeline() {
+            audioContext = new AudioContext();
+            const source = audioContext.createMediaStreamSource(mediaStream);
+            audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+            const silentGain = audioContext.createGain();
+            silentGain.gain.value = 0;
+
+            source.connect(audioProcessor);
+            audioProcessor.connect(silentGain);
+            silentGain.connect(audioContext.destination);
+
+            const captureRate = audioContext.sampleRate;
+            console.log('Audio capture started at', captureRate, 'Hz, sending as', TARGET_SAMPLE_RATE, 'Hz');
+
+            audioProcessor.onaudioprocess = (e) => {
+                if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) {
+                    return;
+                }
+                const inputData = e.inputBuffer.getChannelData(0);
+                ws.send(floatTo16kPCM(inputData, captureRate));
+            };
+        }
+
+        async function resumeAudioContext() {
+            if (!audioContext) {
+                return;
+            }
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+        }
+
+        function connectWebSocket() {
+            const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws';
+            ws = new WebSocket(wsUrl);
+            ws.binaryType = 'arraybuffer';
+            let connected = false;
+
+            ws.onmessage = (event) => {
+                if (typeof event.data === 'string') {
+                    const data = JSON.parse(event.data);
+                    console.log('Received:', data);
+                    if (data.type === 'transcription') {
+                        addMessage('user', data.text);
+                    } else if (data.type === 'assistant') {
+                        addMessage('bot', data.text);
+                    }
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                if (connected) {
+                    updateStatus('disconnected', '连接错误');
+                    stopSession();
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket closed');
+                if (isRecording) {
+                    updateStatus('disconnected', '已断开');
+                    stopSession();
+                }
+            };
+
+            return new Promise((resolve, reject) => {
+                const initialErrorHandler = (error) => {
+                    console.error('WebSocket connect error:', error);
+                    if (!connected) {
+                        reject(new Error('WebSocket 连接失败'));
+                    }
+                };
+
+                ws.addEventListener('error', initialErrorHandler, { once: true });
+                ws.onopen = () => {
+                    connected = true;
+                    console.log('WebSocket connected');
+                    resolve();
+                };
+            });
+        }
+
+        function handleStartError(error) {
+            console.error('Start session failed:', error);
+            const message = microphoneErrorMessage(error);
+            alert('启动失败: ' + message);
+            updateStatus('disconnected', message);
+            stopSession();
+        }
+
+        async function startSession() {
+            startBtn.disabled = true;
+            try {
+                await requestMicrophone();
+
+                updateStatus('connecting', '正在连接服务...');
+                await connectWebSocket();
+
+                startAudioPipeline();
+                await resumeAudioContext();
+
+                isRecording = true;
+                stopBtn.disabled = false;
+                updateStatus('connected', '正在录音，请说话...');
+            } catch (error) {
+                handleStartError(error);
+            }
+        }
+
+        function stopSession() {
+            isRecording = false;
+            if (audioProcessor) {
+                audioProcessor.disconnect();
+                audioProcessor.onaudioprocess = null;
+                audioProcessor = null;
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach((track) => track.stop());
+                mediaStream = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            resetUI();
+        }
+
+        function resetUI() {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+    </script>
+</body>
+</html>

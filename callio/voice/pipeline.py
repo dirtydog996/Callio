@@ -7,12 +7,14 @@ import subprocess
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, WebSocket
+from starlette.websockets import WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 
 from callio.config.settings import Settings, get_settings
 from callio.voice.actions import hermes_tool_definition
 from callio.voice.prompt import build_system_prompt
+from callio.voice.whisper_loader import create_whisper_stt, preload_whisper, wait_for_whisper
 
 
 async def on_user_speech_start(transport, pipeline) -> None:
@@ -61,6 +63,24 @@ async def monitor_hermes(process: asyncio.subprocess.Process) -> None:
 def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> None:
     settings = settings or get_settings()
 
+    if not hasattr(app.state, "voice_runners"):
+        app.state.voice_runners = set()
+
+    @app.on_event("startup")
+    async def preload_whisper_on_startup() -> None:
+        await preload_whisper(settings)
+
+    @app.on_event("shutdown")
+    async def shutdown_voice_sessions() -> None:
+        runners = list(app.state.voice_runners)
+        if not runners:
+            return
+        await asyncio.gather(
+            *(runner.cancel(reason="server shutdown") for runner in runners),
+            return_exceptions=True,
+        )
+        app.state.voice_runners.clear()
+
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket) -> None:
         try:
@@ -78,17 +98,16 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 TTSTextFrame,
             )
             from pipecat.pipeline.pipeline import Pipeline
-            from pipecat.pipeline.runner import PipelineRunner
             from pipecat.pipeline.task import PipelineTask
+            from pipecat.workers.runner import WorkerRunner
             from pipecat.processors.aggregators.llm_context import LLMContext
             from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
             from pipecat.processors.audio.vad_processor import VADProcessor
             from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
             from pipecat.serializers.base_serializer import FrameSerializer
-            from pipecat.services.ollama.llm import OLLamaLLMService
+            from pipecat.services.ollama.llm import OLLamaLLMService, OllamaLLMSettings
             from pipecat.services.settings import TTSSettings
             from pipecat.services.tts_service import TTSService
-            from pipecat.services.whisper.stt import WhisperSTTService
             from pipecat.transcriptions.language import Language
             from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
         except Exception:
@@ -186,6 +205,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 self.engine.runAndWait()
 
         await websocket.accept()
+        await wait_for_whisper(settings)
 
         transport = FastAPIWebsocketTransport(
             websocket,
@@ -199,19 +219,15 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
 
         vad = VADProcessor(
             vad_analyzer=SileroVADAnalyzer(
-                params=VADParams(start_secs=0.2, stop_secs=0.4, min_volume=0.4)
+                params=VADParams(start_secs=0.2, stop_secs=0.5, min_volume=0.2)
             )
         )
 
-        stt = WhisperSTTService(
-            model=settings.whisper_model,
-            device="cpu",
-            language=Language.ZH,
-        )
+        stt = create_whisper_stt(settings)
 
         llm = OLLamaLLMService(
             base_url=settings.ollama_base_url,
-            model=settings.llm_model,
+            settings=OllamaLLMSettings(model=settings.llm_model),
         )
 
         tts = MacNativeTTSService()
@@ -245,7 +261,18 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
         ])
 
         task = PipelineTask(pipeline)
-        runner = PipelineRunner()
+        runner = WorkerRunner(handle_sigint=False, handle_sigterm=False)
+        app.state.voice_runners.add(runner)
+
+        @transport.event_handler("on_client_disconnected")
+        async def on_client_disconnected(_transport, _client_ws) -> None:
+            await runner.cancel(reason="client disconnected")
 
         print("\n⚡ 本地全双工语音管道已握手成功，开始处理音频流...")
-        await runner.run(task)
+        try:
+            await runner.run(task)
+        except WebSocketDisconnect:
+            logger.info("Voice WebSocket disconnected")
+        finally:
+            app.state.voice_runners.discard(runner)
+            await runner.cancel(reason="session ended")

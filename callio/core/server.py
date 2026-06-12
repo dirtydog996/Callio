@@ -6,10 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from callio.config.settings import Settings, get_settings
+from callio.web import WEB_CLIENT_PATH
 from callio.core.database import Database
 from callio.core.memory import MemoryHub
 from callio.worker.tasks import TaskDispatcher
@@ -66,6 +68,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     task_dispatcher = TaskDispatcher(database, memory_hub, manager, settings)
 
     app = FastAPI(title=settings.app_title, version=settings.app_version)
+
+    @app.get("/")
+    async def root() -> RedirectResponse:
+        return RedirectResponse(url=WEB_CLIENT_PATH)
+
     app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
     app.state.settings = settings
     app.state.database = database
@@ -80,10 +87,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/health")
     async def health() -> dict[str, Any]:
         database.initialize()
+        whisper_ready = False
+        try:
+            from callio.voice.whisper_loader import get_preload_error, is_whisper_ready
+
+            whisper_ready = is_whisper_ready()
+            whisper_error = get_preload_error()
+        except Exception:
+            whisper_error = None
+
         return {
             "status": "ok",
             "database": Path(settings.db_path).exists(),
             "voice_enabled": True,
+            "whisper_ready": whisper_ready,
+            "whisper_error": whisper_error,
             "queue_backend": task_dispatcher.backend_name,
         }
 
