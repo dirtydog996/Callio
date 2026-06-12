@@ -98,6 +98,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
             from pipecat.services.llm_service import FunctionCallParams
             from pipecat.services.ollama.llm import OLLamaLLMService
+            from pipecat.services.settings import TTSSettings
             from pipecat.services.tts_service import TTSService
             from pipecat.services.whisper.stt import WhisperSTTService
             from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
@@ -112,7 +113,11 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
 
         class MacNativeTTSService(TTSService):
             def __init__(self) -> None:
-                super().__init__(push_stop_frames=True, sample_rate=22050)
+                super().__init__(
+                    push_stop_frames=True,
+                    sample_rate=22050,
+                    settings=TTSSettings(model=None, voice=None, language=None),
+                )
                 self._delegate = FallbackMacNativeTTSService()
 
             async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Any | None, None]:
@@ -126,7 +131,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             websocket,
             FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
         )
-        stt = WhisperSTTService(model=settings.whisper_model, device="cpu")
+        stt = WhisperSTTService(model=settings.whisper_model, device="cpu", ttfs_p99_latency=2.0)
         llm = OLLamaLLMService(base_url=settings.ollama_base_url, model=settings.llm_model)
         tts = MacNativeTTSService()
         tool_def = hermes_tool_definition()
