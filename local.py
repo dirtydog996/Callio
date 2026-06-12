@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -15,13 +16,29 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.processors.audio.vad_processor import VADProcessor
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
+from loguru import logger
 
 # ===== 纯本地组件导入 =====
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketTransport, FastAPIWebsocketParams
 from pipecat.services.whisper.stt import WhisperSTTService
 from pipecat.services.ollama.llm import OLLamaLLMService
 from pipecat.services.tts_service import TTSService
-from pipecat.frames.frames import Frame, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
+from pipecat.services.settings import TTSSettings
+from pipecat.serializers.base_serializer import FrameSerializer
+from pipecat.frames.frames import (
+    Frame,
+    InputAudioRawFrame,
+    OutputAudioRawFrame,
+    StartFrame,
+    TextFrame,
+    TranscriptionFrame,
+    TTSTextFrame,
+)
+from pipecat.transcriptions.language import Language
 
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
@@ -36,23 +53,85 @@ if not os.path.exists("static"):
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ========================================================
+# 自定义 PCM 序列化：适配 static/index.html 的 Int16 裸流
+# ========================================================
+class RawPCMSerializer(FrameSerializer):
+    def __init__(self, sample_rate: int = 16000, num_channels: int = 1, **kwargs):
+        super().__init__(**kwargs)
+        self._sample_rate = sample_rate
+        self._num_channels = num_channels
+
+    async def setup(self, frame: StartFrame):
+        if frame.audio_in_sample_rate:
+            self._sample_rate = frame.audio_in_sample_rate
+
+    async def deserialize(self, data: str | bytes) -> Frame | None:
+        if isinstance(data, str) or not data:
+            return None
+        return InputAudioRawFrame(
+            audio=data,
+            sample_rate=self._sample_rate,
+            num_channels=self._num_channels,
+        )
+
+    async def serialize(self, frame: Frame) -> str | bytes | None:
+        if isinstance(frame, OutputAudioRawFrame):
+            return frame.audio
+        if isinstance(frame, TranscriptionFrame):
+            return json.dumps({"type": "transcription", "text": frame.text})
+        if isinstance(frame, TextFrame):
+            return json.dumps({"type": "assistant", "text": frame.text})
+        return None
+
+
+class WebSocketUIProcessor(FrameProcessor):
+    """把转写/回复文本推给浏览器（aggregator 会吞掉 TranscriptionFrame）。"""
+
+    def __init__(self, websocket: WebSocket, *, role: str, **kwargs):
+        super().__init__(**kwargs)
+        self._websocket = websocket
+        self._role = role
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        try:
+            if self._role == "user" and isinstance(frame, TranscriptionFrame) and frame.text:
+                await self._websocket.send_text(
+                    json.dumps({"type": "transcription", "text": frame.text}, ensure_ascii=False)
+                )
+            elif self._role == "assistant" and isinstance(frame, (TextFrame, TTSTextFrame)) and frame.text:
+                await self._websocket.send_text(
+                    json.dumps({"type": "assistant", "text": frame.text}, ensure_ascii=False)
+                )
+        except Exception as e:
+            logger.warning(f"WebSocket UI push failed: {e}")
+        await self.push_frame(frame, direction)
+
+
+# ========================================================
 # 自定义封装：Mac 本地原生离线引擎 (pyttsx3)
 # ========================================================
 class MacNativeTTSService(TTSService):
     def __init__(self):
-        super().__init__(push_stop_frames=True, sample_rate=22050)
-        # 初始化 Mac 系统级语音引擎
         try:
-            self.engine = pyttsx3.init(driverName='nsss')
-        except:
-            self.engine = pyttsx3.init()
-        voices = self.engine.getProperty('voices')
-        # 寻找普通的中文普通话女声/男声
+            engine = pyttsx3.init(driverName="nsss")
+        except Exception:
+            engine = pyttsx3.init()
+        voices = engine.getProperty("voices")
+        voice_id = None
         for voice in voices:
             if "zh" in voice.languages or "CN" in voice.id:
-                self.engine.setProperty('voice', voice.id)
+                voice_id = voice.id
+                engine.setProperty("voice", voice.id)
                 break
-        self.engine.setProperty('rate', 175) # 语速调整
+        engine.setProperty("rate", 175)
+
+        super().__init__(
+            push_stop_frames=True,
+            sample_rate=22050,
+            settings=TTSSettings(model=None, voice=voice_id, language=Language.ZH),
+        )
+        self.engine = engine
 
     async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame | None, None]:
         """将大模型吐出的文字通过系统原生转成音频流"""
@@ -111,21 +190,35 @@ async def monitor_hermes(process):
 # ========================================================
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+
     transport = FastAPIWebsocketTransport(
         websocket,
         FastAPIWebsocketParams(
             audio_in_enabled=True,
-            audio_out_enabled=True
+            audio_in_sample_rate=16000,
+            audio_out_enabled=False,
+            serializer=RawPCMSerializer(sample_rate=16000),
+        ),
+    )
+
+    vad = VADProcessor(
+        vad_analyzer=SileroVADAnalyzer(
+            params=VADParams(start_secs=0.2, stop_secs=0.4, min_volume=0.4)
         )
     )
 
-    # 1. 本地耳朵：Faster-Whisper (首次运行自动下载 base 尺寸模型，仅几百M，后续断网可用)
-    stt = WhisperSTTService(model="base", device="cpu")
+    # 1. 本地耳朵：Faster-Whisper
+    stt = WhisperSTTService(
+        model="base",
+        device="cpu",
+        language=Language.ZH,
+    )
 
     # 2. 本地大脑：直连本地 Ollama (确保运行着 qwen2.5-coder)
     llm = OLLamaLLMService(
         base_url="http://localhost:11434/v1",
-        model="qwen2.5-coder:7b"
+        model="qwen2.5:7b"
     )
 
     # 3. 本地嘴巴：调用刚刚封装好的 Mac 系统原生离线 TTS
@@ -153,12 +246,15 @@ async def websocket_endpoint(websocket: WebSocket):
 
     pipeline = Pipeline([
         transport.input(),
+        vad,
         stt,
+        WebSocketUIProcessor(websocket, role="user"),
         context_aggregator.user(),
         llm,
+        WebSocketUIProcessor(websocket, role="assistant"),
         tts,
         transport.output(),
-        context_aggregator.assistant()
+        context_aggregator.assistant(),
     ])
 
     task = PipelineTask(pipeline)
