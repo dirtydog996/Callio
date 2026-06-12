@@ -8,8 +8,11 @@ fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 websockets>=12.0
 
-# 语音合成 (TTS)
-pyttsx3>=2.90
+# 语音合成 (TTS) — ChatTTS 对话向神经 TTS，未安装时自动回退 macOS say
+ChatTTS>=0.2.1
+torch>=2.1.0
+transformers>=4.41,<5  # ChatTTS 需要 LlamaModel；5.x 不兼容，安装后请用 venv/bin/python 启动
+requests>=2.31.0
 
 # 语音识别 (STT) - Whisper
 faster-whisper>=1.0.0

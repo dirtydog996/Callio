@@ -24,6 +24,10 @@ class Settings:
     whisper_device: str = os.getenv("CALLIO_WHISPER_DEVICE", "cpu")
     whisper_compute_type: str = os.getenv("CALLIO_WHISPER_COMPUTE_TYPE", "default")
     whisper_preload: bool = os.getenv("CALLIO_WHISPER_PRELOAD", "1") == "1"
+    tts_backend: str = os.getenv("CALLIO_TTS_BACKEND", "chatt")
+    tts_preload: bool = os.getenv("CALLIO_TTS_PRELOAD", "1") == "1"
+    chatt_home: str = os.getenv("CALLIO_CHATTTS_HOME", "")
+    audio_out_sample_rate: int = int(os.getenv("CALLIO_AUDIO_OUT_SAMPLE_RATE", "16000"))
     hf_endpoint: str = os.getenv("CALLIO_HF_ENDPOINT", os.getenv("HF_ENDPOINT", ""))
     host: str = os.getenv("CALLIO_HOST", "0.0.0.0")
     port: int = int(os.getenv("CALLIO_PORT", "8000"))

@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 from callio.config.settings import Settings, get_settings
 from callio.voice.actions import hermes_tool_definition
 from callio.voice.prompt import build_system_prompt
-from callio.voice.web_tts import create_web_audio_tts
+from callio.voice.tts_loader import preload_tts, wait_for_tts
+from callio.voice.web_tts import create_tts
 from callio.voice.whisper_loader import create_whisper_stt, preload_whisper, wait_for_whisper
 
 
@@ -66,8 +67,11 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
         app.state.voice_runners = set()
 
     @app.on_event("startup")
-    async def preload_whisper_on_startup() -> None:
-        await preload_whisper(settings)
+    async def preload_voice_models_on_startup() -> None:
+        await asyncio.gather(
+            preload_whisper(settings),
+            preload_tts(settings),
+        )
 
     @app.on_event("shutdown")
     async def shutdown_voice_sessions() -> None:
@@ -172,6 +176,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
 
         await websocket.accept()
         await wait_for_whisper(settings)
+        await wait_for_tts(settings)
 
         transport = FastAPIWebsocketTransport(
             websocket,
@@ -179,7 +184,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 audio_in_enabled=True,
                 audio_in_sample_rate=settings.audio_in_sample_rate,
                 audio_out_enabled=True,
-                audio_out_sample_rate=settings.audio_in_sample_rate,
+                audio_out_sample_rate=settings.audio_out_sample_rate,
                 serializer=RawPCMSerializer(sample_rate=settings.audio_in_sample_rate),
             ),
         )
@@ -197,7 +202,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             settings=OllamaLLMSettings(model=settings.llm_model),
         )
 
-        tts = create_web_audio_tts(sample_rate=settings.audio_in_sample_rate)
+        tts = create_tts(settings)
 
         tool_def = hermes_tool_definition()
         hermes_schema = FunctionSchema(

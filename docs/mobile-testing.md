@@ -27,6 +27,8 @@ Callio 的 Web 语音客户端通过浏览器采集麦克风，经 WebSocket 将
 | `CALLIO_SSL_CERT` | HTTPS 证书路径（手机测试必填） |
 | `CALLIO_SSL_KEY` | HTTPS 私钥路径 |
 | `CALLIO_PORT` | 服务端口，默认 `8000` |
+| `CALLIO_HF_ENDPOINT` | HuggingFace 镜像，首次启动下载 Whisper / ChatTTS 时建议设置 |
+| `CALLIO_TTS_BACKEND` | TTS 后端，默认 `chatt`（ChatTTS） |
 
 启用 HTTPS 后，启动时终端二维码会自动使用 `https://` 链接。
 
@@ -66,7 +68,8 @@ mkcert -cert-file certs/callio.pem -key-file certs/callio-key.pem "$LAN_IP" loca
 ```bash
 export CALLIO_SSL_CERT=certs/callio.pem
 export CALLIO_SSL_KEY=certs/callio-key.pem
-python -m callio
+export CALLIO_HF_ENDPOINT=https://hf-mirror.com  # 可选，加速首次模型下载
+./venv/bin/python -m callio
 ```
 
 终端应显示：
@@ -98,7 +101,7 @@ python -m callio
 ### 1. 启动 Callio（可不显示二维码）
 
 ```bash
-python -m callio --no-qr
+./venv/bin/python -m callio --no-qr
 ```
 
 ### 2. 启动 ngrok
@@ -162,10 +165,33 @@ https://xxxx.ngrok-free.app/static/index.html
 
 已修复：Pipecat 不再拦截 SIGINT，按一次 Ctrl+C 应能正常退出。若仍有活跃语音连接，会先取消管道再关闭 uvicorn。
 
+### 启动很慢 / 终端显示「正在加载 ChatTTS 模型」
+
+首次启动会并行预加载 Whisper 与 ChatTTS。国内网络建议：
+
+```bash
+export CALLIO_HF_ENDPOINT=https://hf-mirror.com
+```
+
+ChatTTS 首次下载约需 10 分钟，完成后缓存于 `~/.cache/huggingface/hub/`，后续启动会快很多。
+
+### 听到的是机械系统音（say）而非自然语音
+
+说明 ChatTTS 加载失败，已自动回退 macOS `say`。请检查：
+
+```bash
+./scripts/check-tts-deps.sh
+./venv/bin/pip install 'transformers>=4.41,<5' --force-reinstall  # 若 LlamaModel 报错
+./venv/bin/python -m callio
+```
+
+详见 [全双工语音架构 — TTS 与依赖](voice-full-duplex.md)。
+
 ---
 
 ## 参考
 
 - 项目 README：[配置项与本地启动](../README.md)
+- 全双工语音架构：[voice-full-duplex.md](voice-full-duplex.md)
 - mkcert 文档：<https://github.com/FiloSottile/mkcert>
 - ngrok 文档：<https://ngrok.com/docs>
