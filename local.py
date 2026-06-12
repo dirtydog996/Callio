@@ -5,8 +5,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-import uvicorn
-
 from callio.config.settings import get_settings
 from callio.core.server import create_app
 from callio.voice.pipeline import register_voice_routes
@@ -50,6 +48,8 @@ def show_local_qr() -> None:
 
 
 if __name__ == "__main__":
+    import uvicorn
+
     if len(sys.argv) == 1 or sys.argv[1] != "worker":
         show_local_qr()
     uvicorn.run("local:app", host="0.0.0.0", port=8000, reload=False)
