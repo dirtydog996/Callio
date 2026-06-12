@@ -4,8 +4,6 @@ import asyncio
 import json
 import logging
 import subprocess
-from typing import AsyncGenerator
-
 from fastapi import FastAPI, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
@@ -14,6 +12,7 @@ logger = logging.getLogger(__name__)
 from callio.config.settings import Settings, get_settings
 from callio.voice.actions import hermes_tool_definition
 from callio.voice.prompt import build_system_prompt
+from callio.voice.web_tts import create_web_audio_tts
 from callio.voice.whisper_loader import create_whisper_stt, preload_whisper, wait_for_whisper
 
 
@@ -91,6 +90,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             from pipecat.frames.frames import (
                 Frame,
                 InputAudioRawFrame,
+                InterruptionFrame,
                 OutputAudioRawFrame,
                 StartFrame,
                 TextFrame,
@@ -106,8 +106,6 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
             from pipecat.serializers.base_serializer import FrameSerializer
             from pipecat.services.ollama.llm import OLLamaLLMService, OllamaLLMSettings
-            from pipecat.services.settings import TTSSettings
-            from pipecat.services.tts_service import TTSService
             from pipecat.transcriptions.language import Language
             from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
         except Exception:
@@ -158,7 +156,9 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             async def process_frame(self, frame: Frame, direction: FrameDirection):
                 await super().process_frame(frame, direction)
                 try:
-                    if self._role == "user" and isinstance(frame, TranscriptionFrame) and frame.text:
+                    if isinstance(frame, InterruptionFrame):
+                        await self._websocket.send_text(json.dumps({"type": "interrupt"}))
+                    elif self._role == "user" and isinstance(frame, TranscriptionFrame) and frame.text:
                         await self._websocket.send_text(
                             json.dumps({"type": "transcription", "text": frame.text}, ensure_ascii=False)
                         )
@@ -170,40 +170,6 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                     logger.warning(f"WebSocket UI push failed: {e}")
                 await self.push_frame(frame, direction)
 
-        class MacNativeTTSService(TTSService):
-            def __init__(self):
-                import pyttsx3
-
-                try:
-                    engine = pyttsx3.init(driverName="nsss")
-                except Exception:
-                    engine = pyttsx3.init()
-                voices = engine.getProperty("voices")
-                voice_id = None
-                for voice in voices:
-                    if "zh" in voice.languages or "CN" in voice.id:
-                        voice_id = voice.id
-                        engine.setProperty("voice", voice.id)
-                        break
-                engine.setProperty("rate", 175)
-
-                super().__init__(
-                    push_stop_frames=True,
-                    sample_rate=22050,
-                    settings=TTSSettings(model=None, voice=voice_id, language=Language.ZH),
-                )
-                self.engine = engine
-
-            async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame | None, None]:
-                print(f"🎙️ [本地 TTS 发声]: {text}")
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, self._speak, text)
-                yield None
-
-            def _speak(self, text: str) -> None:
-                self.engine.say(text)
-                self.engine.runAndWait()
-
         await websocket.accept()
         await wait_for_whisper(settings)
 
@@ -212,7 +178,8 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             FastAPIWebsocketParams(
                 audio_in_enabled=True,
                 audio_in_sample_rate=settings.audio_in_sample_rate,
-                audio_out_enabled=False,
+                audio_out_enabled=True,
+                audio_out_sample_rate=settings.audio_in_sample_rate,
                 serializer=RawPCMSerializer(sample_rate=settings.audio_in_sample_rate),
             ),
         )
@@ -230,7 +197,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             settings=OllamaLLMSettings(model=settings.llm_model),
         )
 
-        tts = MacNativeTTSService()
+        tts = create_web_audio_tts(sample_rate=settings.audio_in_sample_rate)
 
         tool_def = hermes_tool_definition()
         hermes_schema = FunctionSchema(

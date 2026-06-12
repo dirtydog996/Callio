@@ -106,7 +106,8 @@
     <div class="info">
         <p>点击"开始对话"后，请立即允许麦克风权限</p>
         <p>iPhone 通过局域网 IP 访问时，浏览器可能拒绝麦克风；可改用 HTTPS 或在本机浏览器打开</p>
-        <p>系统会使用本地 Whisper 进行语音识别，Ollama 进行对话生成</p>
+        <p>全双工：麦克风与回复语音均通过 WebSocket 传输 PCM 流（类似电话）</p>
+        <p>手机测试请使用 <code>./scripts/start-mobile-https.sh</code> 启动 HTTPS</p>
     </div>
 
     <script>
@@ -117,6 +118,7 @@
         let mediaStream = null;
         let audioProcessor = null;
         let isRecording = false;
+        let playbackNextTime = 0;
 
         const statusEl = document.getElementById('status');
         const messagesEl = document.getElementById('messages');
@@ -134,6 +136,43 @@
             div.textContent = (role === 'user' ? '👤 ' : '🤖 ') + text;
             messagesEl.appendChild(div);
             messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        function withTimeout(promise, timeoutMs, message) {
+            return Promise.race([
+                promise,
+                new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error(message)), timeoutMs);
+                }),
+            ]);
+        }
+
+        function stopDownlinkPlayback() {
+            playbackNextTime = 0;
+        }
+
+        function playDownlinkPCM(arrayBuffer) {
+            if (!audioContext || !arrayBuffer || arrayBuffer.byteLength < 2) {
+                return;
+            }
+
+            const int16 = new Int16Array(arrayBuffer);
+            const float32 = new Float32Array(int16.length);
+            for (let i = 0; i < int16.length; i++) {
+                float32[i] = int16[i] / 32768;
+            }
+
+            const buffer = audioContext.createBuffer(1, float32.length, TARGET_SAMPLE_RATE);
+            buffer.getChannelData(0).set(float32);
+
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+
+            const now = audioContext.currentTime;
+            const startAt = Math.max(now + 0.02, playbackNextTime);
+            source.start(startAt);
+            playbackNextTime = startAt + buffer.duration;
         }
 
         function floatTo16kPCM(input, inputSampleRate) {
@@ -185,25 +224,33 @@
             const host = window.location.hostname;
             const isLocalhost = host === 'localhost' || host === '127.0.0.1';
             if (!window.isSecureContext && !isLocalhost) {
-                console.warn('Insecure context: microphone may be blocked on iOS Safari');
+                throw new Error(
+                    '当前为 HTTP 非安全连接，手机无法使用麦克风。请运行 ./scripts/start-mobile-https.sh 后以 HTTPS 访问。'
+                );
             }
         }
 
         async function requestMicrophone() {
             ensureMicrophoneSupported();
-            updateStatus('connecting', '请允许使用麦克风...');
-            mediaStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            });
+            updateStatus('connecting', '[1/2] 请允许麦克风权限（未弹出请检查 HTTPS）...');
+            mediaStream = await withTimeout(
+                navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                }),
+                15000,
+                '麦克风权限请求超时：请确认使用 HTTPS，并在系统弹窗中点击「允许」'
+            );
         }
 
         function startAudioPipeline() {
-            audioContext = new AudioContext();
+            if (!audioContext) {
+                audioContext = new AudioContext();
+            }
             const source = audioContext.createMediaStreamSource(mediaStream);
             audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
             const silentGain = audioContext.createGain();
@@ -241,13 +288,20 @@
             let connected = false;
 
             ws.onmessage = (event) => {
+                if (event.data instanceof ArrayBuffer) {
+                    playDownlinkPCM(event.data);
+                    return;
+                }
                 if (typeof event.data === 'string') {
                     const data = JSON.parse(event.data);
                     console.log('Received:', data);
                     if (data.type === 'transcription') {
+                        stopDownlinkPlayback();
                         addMessage('user', data.text);
                     } else if (data.type === 'assistant') {
                         addMessage('bot', data.text);
+                    } else if (data.type === 'interrupt') {
+                        stopDownlinkPlayback();
                     }
                 }
             };
@@ -298,15 +352,16 @@
             try {
                 await requestMicrophone();
 
-                updateStatus('connecting', '正在连接服务...');
+                updateStatus('connecting', '[2/2] 正在连接语音服务...');
                 await connectWebSocket();
 
                 startAudioPipeline();
                 await resumeAudioContext();
+                stopDownlinkPlayback();
 
                 isRecording = true;
                 stopBtn.disabled = false;
-                updateStatus('connected', '正在录音，请说话...');
+                updateStatus('connected', '全双工已连接，请说话...');
             } catch (error) {
                 handleStartError(error);
             }
@@ -314,6 +369,7 @@
 
         function stopSession() {
             isRecording = false;
+            stopDownlinkPlayback();
             if (audioProcessor) {
                 audioProcessor.disconnect();
                 audioProcessor.onaudioprocess = null;

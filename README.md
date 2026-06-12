@@ -30,7 +30,7 @@ Whisper models are cached under `~/.cache/huggingface/hub/`. After the first dow
 ./scripts/start-mobile-https.sh
 ```
 
-完整说明见 **[docs/mobile-testing.md](docs/mobile-testing.md)**（mkcert / ngrok、iPhone 证书信任、常见问题）。
+完整说明见 **[docs/mobile-testing.md](docs/mobile-testing.md)**（mkcert / ngrok、iPhone 证书信任、常见问题）。全双工语音架构见 **[docs/voice-full-duplex.md](docs/voice-full-duplex.md)**。
 
 ## Run locally
 
