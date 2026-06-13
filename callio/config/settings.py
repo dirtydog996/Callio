@@ -39,6 +39,16 @@ class Settings:
     sandbox_use_docker: bool = os.getenv("CALLIO_USE_DOCKER", "0") == "1"
     enable_git_resets: bool = os.getenv("CALLIO_ENABLE_GIT_RESETS", "0") == "1"
     watchdog_health_path: str = "/api/v1/health"
+    max_parallel_tasks: int = int(os.getenv("CALLIO_MAX_PARALLEL_TASKS", "3"))
+    summarize_debounce_sec: int = int(os.getenv("CALLIO_SUMMARIZE_DEBOUNCE_SEC", "30"))
+    progress_inject: bool = os.getenv("CALLIO_PROGRESS_INJECT", "1") == "1"
+    memory_inject: bool = os.getenv("CALLIO_MEMORY_INJECT", "1") == "1"
+    require_verbal_confirm: bool = os.getenv("CALLIO_REQUIRE_VERBAL_CONFIRM", "1") == "1"
+    agent_backend: str = os.getenv("CALLIO_AGENT_BACKEND", "")
+    agent_command: str = os.getenv("CALLIO_AGENT_COMMAND", "")
+    task_timeout_sec: int = int(os.getenv("CALLIO_TASK_TIMEOUT_SEC", "3600"))
+    global_max_parallel: int = int(os.getenv("CALLIO_GLOBAL_MAX_PARALLEL", "5"))
+    execute_max_retries: int = int(os.getenv("CALLIO_EXECUTE_MAX_RETRIES", "3"))
 
 
 @lru_cache(maxsize=1)

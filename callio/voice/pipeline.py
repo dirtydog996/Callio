@@ -3,15 +3,19 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import subprocess
+
 from fastapi import FastAPI, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 
 from callio.config.settings import Settings, get_settings
-from callio.voice.actions import hermes_tool_definition
+from callio.voice.memory_context import build_memory_block
 from callio.voice.prompt import build_system_prompt
+from callio.voice.resume_context import build_resume_block
+from callio.voice.tools.handlers import create_tool_handlers
+from callio.voice.tools.schemas import all_tool_definitions
+from callio.voice.session_hook import SessionHook
 from callio.voice.tts_loader import preload_tts, wait_for_tts
 from callio.voice.web_tts import create_tts
 from callio.voice.whisper_loader import create_whisper_stt, preload_whisper, wait_for_whisper
@@ -24,40 +28,6 @@ async def on_user_speech_start(transport, pipeline) -> None:
         pipeline.clear_buffers()
     if hasattr(pipeline, "cancel_current_task"):
         pipeline.cancel_current_task()
-
-
-async def execute_hermes_coding(params) -> None:
-    summary = params.arguments.get("summary", "")
-    actions = params.arguments.get("actions", [])
-
-    hermes_prompt = (
-        f"【本地语音脑暴结论】：{summary}\n"
-        f"【请立即执行以下 Action 清单】：\n" + "\n".join([f"- {a}" for a in actions]) +
-        "\n请自主思考、修改本地文件，并运行测试验证代码正确性。"
-    )
-
-    print(f"\n🤖 [Hermes Agent 唤醒] 本地后台开始工作... 任务内容:\n{hermes_prompt}\n")
-
-    try:
-        process = await asyncio.create_subprocess_exec(
-            "hermes", "run", "--task", hermes_prompt,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        asyncio.create_task(monitor_hermes(process))
-        result_msg = "Hermes 已经在您的 Mac 后台启动，正在本地重构代码库..."
-    except Exception as e:
-        result_msg = f"唤醒 Hermes 失败: {str(e)}"
-
-    await params.result_callback({"status": "triggered", "message": result_msg})
-
-
-async def monitor_hermes(process: asyncio.subprocess.Process) -> None:
-    stdout, stderr = await process.communicate()
-    if process.returncode == 0:
-        print("\n🎉 [Hermes 结束] 本地自动化编码与测试全部通过！")
-    else:
-        print(f"\n❌ [Hermes 失败] 本地执行出错: {stderr.decode()}")
 
 
 def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> None:
@@ -86,6 +56,14 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket) -> None:
+        orchestrator = getattr(app.state, "orchestrator", None)
+        memory_hub = getattr(app.state, "memory_hub", None)
+        connection_id = id(websocket)
+        session_id: str | None = None
+        session_ctx = None
+        resume_block = ""
+        history_messages: list[dict[str, str]] = []
+
         try:
             from pipecat.adapters.schemas.function_schema import FunctionSchema
             from pipecat.adapters.schemas.tools_schema import ToolsSchema
@@ -100,6 +78,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 TextFrame,
                 TranscriptionFrame,
                 TTSTextFrame,
+                VADUserStartedSpeakingFrame,
             )
             from pipecat.pipeline.pipeline import Pipeline
             from pipecat.pipeline.task import PipelineTask
@@ -149,9 +128,14 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                     return json.dumps({"type": "assistant", "text": frame.text})
                 return None
 
-        class WebSocketUIProcessor(FrameProcessor):
-            """把转写/回复文本推给浏览器（aggregator 会吞掉 TranscriptionFrame）。"""
+        class BargeInProcessor(FrameProcessor):
+            async def process_frame(self, frame: Frame, direction: FrameDirection):
+                await super().process_frame(frame, direction)
+                if isinstance(frame, VADUserStartedSpeakingFrame):
+                    await self.broadcast_frame(InterruptionFrame)
+                await self.push_frame(frame, direction)
 
+        class WebSocketUIProcessor(FrameProcessor):
             def __init__(self, ws: WebSocket, *, role: str, **kwargs):
                 super().__init__(**kwargs)
                 self._websocket = ws
@@ -177,6 +161,36 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
         await websocket.accept()
         await wait_for_whisper(settings)
         await wait_for_tts(settings)
+
+        if orchestrator is not None:
+            resume_session_id = websocket.query_params.get("resume_session_id")
+            session_ctx = orchestrator.sessions.open(
+                connection_id,
+                resume_session_id=resume_session_id or None,
+            )
+            session_id = session_ctx.session_id
+            resume_block = ""
+            history_messages: list[dict[str, str]] = []
+            if session_ctx.resumed:
+                from callio.voice.resume_context import parse_transcript_messages
+
+                session_row = orchestrator.database.get_session(session_id) or {}
+                transcript = str(session_row.get("transcript", ""))
+                if transcript:
+                    orchestrator.transcripts.hydrate(session_id, transcript)
+                    history_messages = parse_transcript_messages(transcript)
+                resume_block = build_resume_block(orchestrator.database, session_id)
+            await websocket.send_json({
+                "type": "session",
+                "session_id": session_id,
+                "resumed": session_ctx.resumed,
+                "title": session_ctx.title,
+            })
+            await orchestrator.event_bus.emit(
+                session_id,
+                "SESSION_RESUMED" if session_ctx.resumed else "SESSION_STARTED",
+                {"title": session_ctx.title, "resumed": session_ctx.resumed},
+            )
 
         transport = FastAPIWebsocketTransport(
             websocket,
@@ -204,26 +218,58 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
 
         tts = create_tts(settings)
 
-        tool_def = hermes_tool_definition()
-        hermes_schema = FunctionSchema(
-            name=tool_def["name"],
-            description=tool_def["description"],
-            properties=tool_def["properties"],
-            required=tool_def["required"],
-        )
-        llm.register_function("execute_hermes_coding", execute_hermes_coding, cancel_on_interruption=False)
+        progress_block = ""
+        memory_block = ""
+        if orchestrator is not None and session_id:
+            progress_block = orchestrator.progress.build_context_block(session_id)
+        if settings.memory_inject and memory_hub is not None:
+            database = getattr(app.state, "database", None)
+            if database is not None:
+                memory_block = build_memory_block(memory_hub, database)
+                if not resume_block and session_id:
+                    resume_block = build_resume_block(database, session_id)
+
+        tool_schemas = [
+            FunctionSchema(
+                name=tool["name"],
+                description=tool["description"],
+                properties=tool["properties"],
+                required=tool["required"],
+            )
+            for tool in all_tool_definitions()
+        ]
+
+        if orchestrator is not None and session_id:
+            handlers = create_tool_handlers(orchestrator, session_id)
+            for name, handler in handlers.items():
+                llm.register_function(name, handler, cancel_on_interruption=False)
 
         context = LLMContext(
-            messages=[{"role": "system", "content": build_system_prompt(settings.voice_response_limit)}],
-            tools=ToolsSchema(standard_tools=[hermes_schema]),
+            messages=[{
+                "role": "system",
+                "content": build_system_prompt(
+                    settings.voice_response_limit,
+                    progress_block=progress_block,
+                    memory_block=memory_block,
+                    resume_block=resume_block,
+                ),
+            }, *history_messages],
+            tools=ToolsSchema(standard_tools=tool_schemas) if orchestrator else None,
         )
         context_aggregator = LLMContextAggregatorPair(context)
 
-        pipeline = Pipeline([
+        processors = [
             transport.input(),
             vad,
+            BargeInProcessor(),
             stt,
             WebSocketUIProcessor(websocket, role="user"),
+        ]
+        if orchestrator is not None and session_id:
+            processors.append(
+                SessionHook(orchestrator, session_id, context, settings, memory_hub=memory_hub)
+            )
+        processors.extend([
             context_aggregator.user(),
             llm,
             WebSocketUIProcessor(websocket, role="assistant"),
@@ -231,6 +277,8 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             transport.output(),
             context_aggregator.assistant(),
         ])
+
+        pipeline = Pipeline(processors)
 
         task = PipelineTask(pipeline)
         runner = WorkerRunner(handle_sigint=False, handle_sigterm=False)
@@ -241,6 +289,9 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             await runner.cancel(reason="client disconnected")
 
         print("\n⚡ 本地全双工语音管道已握手成功，开始处理音频流...")
+        if session_id:
+            resumed_label = "（续聊）" if session_ctx and session_ctx.resumed else ""
+            print(f"📋 会话 ID: {session_id}{resumed_label}")
         try:
             await runner.run(task)
         except WebSocketDisconnect:
@@ -248,3 +299,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
         finally:
             app.state.voice_runners.discard(runner)
             await runner.cancel(reason="session ended")
+            if orchestrator is not None and session_id:
+                transcript = await orchestrator.transcripts.flush(session_id)
+                await orchestrator.coordinator.finalize_summary(session_id, transcript)
+                await orchestrator.sessions.finalize(connection_id, transcript=transcript)

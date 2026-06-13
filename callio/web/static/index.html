@@ -80,6 +80,44 @@
             color: #4CAF50;
             margin: 10px 0;
         }
+        .tasks {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .task-item {
+            font-size: 13px;
+            padding: 6px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .task-proposed { color: #ff9800; }
+        .task-running { color: #2196F3; }
+        .task-success { color: #4CAF50; }
+        .task-actions {
+            margin-top: 4px;
+        }
+        .task-progress {
+            height: 4px;
+            background: #eee;
+            border-radius: 2px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+        .task-progress-bar {
+            height: 100%;
+            background: #2196F3;
+            width: 0%;
+            transition: width 0.2s;
+        }
+        .task-actions button {
+            padding: 4px 10px;
+            font-size: 12px;
+            margin-right: 6px;
+        }
         .info {
             text-align: center;
             color: #666;
@@ -94,6 +132,12 @@
     <div id="status" class="status disconnected">未连接</div>
 
     <div class="controls">
+        <label for="sessionSelect" style="display:block;text-align:center;margin-bottom:8px;color:#666;font-size:14px;">
+            会话
+            <select id="sessionSelect" style="margin-left:8px;padding:6px 10px;border-radius:6px;border:1px solid #ccc;max-width:260px;">
+                <option value="">新会话</option>
+            </select>
+        </label>
         <button id="startBtn" onclick="startSession()">开始对话</button>
         <button id="stopBtn" onclick="stopSession()" disabled>结束对话</button>
     </div>
@@ -101,6 +145,11 @@
     <div class="transcript">
         <h3>对话记录</h3>
         <div id="messages"></div>
+    </div>
+
+    <div class="tasks">
+        <h3>后台任务 <button id="confirmAllBtn" onclick="confirmAllTasks()" style="font-size:12px">全部确认</button></h3>
+        <div id="tasks"></div>
     </div>
 
     <div class="info">
@@ -114,6 +163,8 @@
         const TARGET_SAMPLE_RATE = 16000;
 
         let ws = null;
+        let statusWs = null;
+        let sessionId = null;
         let audioContext = null;
         let mediaStream = null;
         let audioProcessor = null;
@@ -122,8 +173,63 @@
 
         const statusEl = document.getElementById('status');
         const messagesEl = document.getElementById('messages');
+        const tasksEl = document.getElementById('tasks');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
+        const sessionSelect = document.getElementById('sessionSelect');
+
+        function formatSessionLabel(session) {
+            const title = session.title || session.session_id.slice(0, 8);
+            const ended = session.ended_at ? '已结束' : '进行中';
+            return `${title} (${ended})`;
+        }
+
+        async function loadSessionOptions() {
+            try {
+                const response = await fetch('/api/v1/sessions');
+                const data = await response.json();
+                const items = data.items || [];
+                const current = sessionSelect.value;
+                sessionSelect.innerHTML = '<option value="">新会话</option>';
+                items.forEach((session) => {
+                    const option = document.createElement('option');
+                    option.value = session.session_id;
+                    option.textContent = formatSessionLabel(session);
+                    sessionSelect.appendChild(option);
+                });
+                if (current) {
+                    sessionSelect.value = current;
+                }
+            } catch (error) {
+                console.warn('Failed to load sessions:', error);
+            }
+        }
+
+        function renderStoredTranscript(transcript) {
+            if (!transcript) return;
+            transcript.split('\n').forEach((line) => {
+                const text = line.trim();
+                if (!text) return;
+                if (text.startsWith('user:')) {
+                    addMessage('user', text.slice(5).trim());
+                } else if (text.startsWith('assistant:')) {
+                    addMessage('bot', text.slice(10).trim());
+                }
+            });
+        }
+
+        async function preloadResumeSession(sessionId) {
+            const response = await fetch(`/api/v1/sessions/${sessionId}`);
+            const data = await response.json();
+            if (!data.found || !data.session) return;
+            messagesEl.innerHTML = '';
+            renderStoredTranscript(data.session.transcript || '');
+            if (data.session.summary) {
+                addMessage('bot', `（续聊摘要）${data.session.summary}`);
+            }
+        }
+
+        loadSessionOptions();
 
         function updateStatus(status, text) {
             statusEl.className = 'status ' + status;
@@ -136,6 +242,133 @@
             div.textContent = (role === 'user' ? '👤 ' : '🤖 ') + text;
             messagesEl.appendChild(div);
             messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        const taskNodes = new Map();
+
+        function renderTask(event) {
+            if (!event || !event.event) return;
+            const interesting = [
+                'TASK_PROPOSED', 'TASK_CONFIRMED', 'TASK_RUNNING',
+                'TASK_PROGRESS', 'TASK_COMPLETED', 'SUMMARY_UPDATED'
+            ];
+            if (!interesting.includes(event.event)) return;
+
+            const nodeId = event.node_id;
+            let div = nodeId ? taskNodes.get(nodeId) : null;
+            if (!div) {
+                div = document.createElement('div');
+                if (nodeId) taskNodes.set(nodeId, div);
+                tasksEl.prepend(div);
+            }
+
+            const status = event.status || event.phase || event.event;
+            let cls = 'task-item';
+            if (status === 'PROPOSED' || event.event === 'TASK_PROPOSED') cls += ' task-proposed';
+            else if (status === 'RUNNING') cls += ' task-running';
+            else if (status === 'SUCCESS') cls += ' task-success';
+            else if (status === 'FAILED' || status === 'CANCELLED') cls += ' task-failed';
+            div.className = cls;
+            div.innerHTML = '';
+
+            const title = event.feature_name || event.title || nodeId || '任务';
+            const label = document.createElement('div');
+            const progressPct = event.progress != null ? ` ${event.progress}%` : '';
+            label.textContent = `[${event.event}] ${title} — ${status}${progressPct}`;
+            div.appendChild(label);
+
+            if (event.progress != null && status === 'RUNNING') {
+                const barWrap = document.createElement('div');
+                barWrap.className = 'task-progress';
+                const bar = document.createElement('div');
+                bar.className = 'task-progress-bar';
+                bar.style.width = `${Math.min(100, event.progress)}%`;
+                barWrap.appendChild(bar);
+                div.appendChild(barWrap);
+            }
+
+            if (event.event === 'TASK_PROPOSED' && nodeId && sessionId) {
+                const actions = document.createElement('div');
+                actions.className = 'task-actions';
+                const confirmBtn = document.createElement('button');
+                confirmBtn.textContent = '确认';
+                confirmBtn.onclick = () => postTaskAction('confirm', [nodeId]);
+                const cancelBtn = document.createElement('button');
+                cancelBtn.textContent = '取消';
+                cancelBtn.onclick = () => postTaskAction('cancel', [nodeId]);
+                actions.append(confirmBtn, cancelBtn);
+                div.appendChild(actions);
+            }
+
+            if (status === 'RUNNING' && nodeId) {
+                const actions = document.createElement('div');
+                actions.className = 'task-actions';
+                const stopBtn = document.createElement('button');
+                stopBtn.textContent = '停止';
+                stopBtn.onclick = () => cancelRunningTask(nodeId);
+                actions.appendChild(stopBtn);
+                div.appendChild(actions);
+            }
+        }
+
+        async function confirmAllTasks() {
+            if (!sessionId) return;
+            await postTaskAction('confirm', [], true);
+        }
+
+        async function cancelRunningTask(nodeId) {
+            try {
+                const res = await fetch(`/api/v1/tasks/${nodeId}/cancel`, { method: 'POST' });
+                const data = await res.json();
+                addMessage('bot', data.message || '已请求停止');
+            } catch (e) {
+                console.warn('cancel running failed', e);
+            }
+        }
+
+        async function postTaskAction(action, nodeIds, confirmAll = false) {
+            if (!sessionId) return;
+            const path = action === 'confirm'
+                ? `/api/v1/sessions/${sessionId}/tasks/confirm`
+                : `/api/v1/sessions/${sessionId}/tasks/cancel`;
+            const body = action === 'confirm'
+                ? { node_ids: nodeIds, confirm_all: confirmAll }
+                : { node_ids: nodeIds };
+            try {
+                const res = await fetch(path, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                addMessage('bot', data.message || `任务已${action}`);
+            } catch (e) {
+                console.warn('task action failed', e);
+            }
+        }
+
+        function connectStatusSocket() {
+            const url = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws/status';
+            statusWs = new WebSocket(url);
+            statusWs.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (sessionId && data.session_id && data.session_id !== sessionId) return;
+                    renderTask(data);
+                } catch (e) {
+                    console.warn('status parse error', e);
+                }
+            };
+        }
+
+        function disconnectStatusSocket() {
+            if (statusWs) {
+                statusWs.close();
+                statusWs = null;
+            }
+            tasksEl.innerHTML = '';
+            taskNodes.clear();
+            sessionId = null;
         }
 
         function withTimeout(promise, timeoutMs, message) {
@@ -282,7 +515,11 @@
         }
 
         function connectWebSocket() {
-            const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws';
+            const resumeId = sessionSelect.value;
+            let wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws';
+            if (resumeId) {
+                wsUrl += `?resume_session_id=${encodeURIComponent(resumeId)}`;
+            }
             ws = new WebSocket(wsUrl);
             ws.binaryType = 'arraybuffer';
             let connected = false;
@@ -295,7 +532,12 @@
                 if (typeof event.data === 'string') {
                     const data = JSON.parse(event.data);
                     console.log('Received:', data);
-                    if (data.type === 'transcription') {
+                    if (data.type === 'session') {
+                        sessionId = data.session_id;
+                        if (data.resumed) {
+                            updateStatus('connected', `续聊：${data.title || sessionId.slice(0, 8)}`);
+                        }
+                    } else if (data.type === 'transcription') {
                         stopDownlinkPlayback();
                         addMessage('user', data.text);
                     } else if (data.type === 'assistant') {
@@ -352,7 +594,14 @@
             try {
                 await requestMicrophone();
 
-                updateStatus('connecting', '[2/2] 正在连接语音服务...');
+                const resumeId = sessionSelect.value;
+                if (resumeId) {
+                    updateStatus('connecting', '[1/2] 加载历史会话...');
+                    await preloadResumeSession(resumeId);
+                }
+
+                updateStatus('connecting', resumeId ? '[2/2] 正在续聊...' : '[2/2] 正在连接语音服务...');
+                connectStatusSocket();
                 await connectWebSocket();
 
                 startAudioPipeline();
@@ -361,7 +610,10 @@
 
                 isRecording = true;
                 stopBtn.disabled = false;
-                updateStatus('connected', '全双工已连接，请说话...');
+                sessionSelect.disabled = true;
+                if (!resumeId) {
+                    updateStatus('connected', '全双工已连接，请说话...');
+                }
             } catch (error) {
                 handleStartError(error);
             }
@@ -369,6 +621,9 @@
 
         function stopSession() {
             isRecording = false;
+            sessionSelect.disabled = false;
+            loadSessionOptions();
+            disconnectStatusSocket();
             stopDownlinkPlayback();
             if (audioProcessor) {
                 audioProcessor.disconnect();

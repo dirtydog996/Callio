@@ -42,6 +42,14 @@ export CALLIO_HF_ENDPOINT=https://hf-mirror.com
 | `CALLIO_TTS_PRELOAD` | `1` | Preload ChatTTS at startup |
 | `CALLIO_CHATTTS_HOME` | _(empty)_ | Optional HuggingFace cache dir for ChatTTS weights |
 | `CALLIO_AUDIO_OUT_SAMPLE_RATE` | `16000` | Downlink PCM sample rate to the browser |
+| `CALLIO_MAX_PARALLEL_TASKS` | `3` | Max parallel RUNNING tasks per voice session |
+| `CALLIO_SUMMARIZE_DEBOUNCE_SEC` | `30` | Auto-summary debounce interval during calls |
+| `CALLIO_PROGRESS_INJECT` | `1` | Inject task progress block into voice system prompt |
+| `CALLIO_AGENT_BACKEND` | _(empty)_ | Force agent: `hermes`, `openclaw`, `claude` |
+| `CALLIO_AGENT_COMMAND` | _(empty)_ | Custom command with `{task}` placeholder |
+| `CALLIO_TASK_TIMEOUT_SEC` | `3600` | Max seconds per background task |
+| `CALLIO_GLOBAL_MAX_PARALLEL` | `5` | Max RUNNING tasks across all sessions |
+| `CALLIO_EXECUTE_MAX_RETRIES` | `3` | Retries for EXECUTE agent runs |
 | `CALLIO_LLM_MODEL` | `qwen2.5:7b` | Ollama model name |
 | `CALLIO_OLLAMA_BASE_URL` | `http://localhost:11434/v1` | Ollama OpenAI-compatible API |
 | `CALLIO_SSL_CERT` | _(empty)_ | HTTPS certificate path (required for mobile microphone) |
@@ -79,6 +87,7 @@ TTS **运行在 Mac 服务端**，手机只采集麦克风并播放下行 PCM。
 
 - 手机测试：[docs/mobile-testing.md](docs/mobile-testing.md)
 - 全双工语音架构：[docs/voice-full-duplex.md](docs/voice-full-duplex.md)
+- 迭代优化路线图：[docs/iteration-roadmap.md](docs/iteration-roadmap.md)
 
 ## Run locally (ASGI)
 
@@ -97,6 +106,11 @@ TTS **运行在 Mac 服务端**，手机只采集麦克风并播放下行 PCM。
 - `POST /api/v1/sessions`
 - `WS /ws/status`
 - `WS /ws` — full-duplex voice (PCM + JSON)
+- `GET /api/v1/sessions/{session_id}/tasks` — session tasks, progress, events
+- `POST /api/v1/sessions/{session_id}/tasks/confirm` — confirm proposed tasks
+- `POST /api/v1/sessions/{session_id}/tasks/cancel` — cancel proposed tasks
+- `POST /api/v1/tasks/{node_id}/cancel` — stop a RUNNING task
+- `GET /api/v1/tasks/{node_id}/runs` — task execution logs
 
 ## Troubleshooting
 
@@ -139,4 +153,14 @@ export CALLIO_HF_ENDPOINT=https://hf-mirror.com
 from callio.app import app
 print(len(app.routes))
 PY
+
+# 端到端语音冒烟（需本机 say + Ollama + 服务已启动）
+./venv/bin/python scripts/e2e-voice-test.py
+./venv/bin/python scripts/e2e-voice-test.py --two-round-resume
 ```
+
+### Session 续聊
+
+- 浏览器：开始对话前在下拉框选择历史会话
+- WebSocket：`ws://host/ws?resume_session_id=<uuid>`
+- API：`GET /api/v1/sessions/{session_id}` 查看历史转写与摘要

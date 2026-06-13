@@ -1,19 +1,16 @@
+"""Legacy Hermes tool — superseded by voice/tools (propose_tasks + confirm_tasks)."""
+
 from __future__ import annotations
 
-from typing import Any
+from callio.voice.tools.schemas import all_tool_definitions
 
 
-def hermes_tool_definition() -> dict[str, Any]:
-    return {
-        "name": "execute_hermes_coding",
-        "description": "当用户说‘开始落实’时触发，调用后台执行具体代码重构。",
-        "properties": {
-            "summary": {"type": "string", "description": "头脑风暴得出的功能和架构结论"},
-            "actions": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "需要修改的文件或动作清单",
-            },
-        },
-        "required": ["summary", "actions"],
+def hermes_tool_definition() -> dict:
+    """Backward-compatible alias; returns first orchestrator tool shape."""
+    tools = all_tool_definitions()
+    return tools[0] if tools else {
+        "name": "propose_tasks",
+        "description": "提议后台任务",
+        "properties": {"tasks": {"type": "array", "items": {"type": "object"}}},
+        "required": ["tasks"],
     }

@@ -14,6 +14,7 @@ from callio.config.settings import Settings, get_settings
 from callio.web import WEB_CLIENT_PATH
 from callio.core.database import Database
 from callio.core.memory import MemoryHub
+from callio.orchestrator import Orchestrator
 from callio.worker.tasks import TaskDispatcher
 
 
@@ -30,6 +31,15 @@ class SessionItem(BaseModel):
     title: str
     transcript: str = ""
     summary: str = ""
+
+
+class TaskConfirmRequest(BaseModel):
+    node_ids: list[str] = Field(default_factory=list)
+    confirm_all: bool = False
+
+
+class TaskCancelRequest(BaseModel):
+    node_ids: list[str] = Field(default_factory=list)
 
 
 class ConnectionManager:
@@ -66,6 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     memory_hub = MemoryHub(database, settings)
     manager = ConnectionManager()
     task_dispatcher = TaskDispatcher(database, memory_hub, manager, settings)
+    orchestrator = Orchestrator(database, manager, task_dispatcher, settings)
 
     app = FastAPI(title=settings.app_title, version=settings.app_version)
 
@@ -79,10 +90,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.memory_hub = memory_hub
     app.state.status_manager = manager
     app.state.task_dispatcher = task_dispatcher
+    app.state.orchestrator = orchestrator
 
     @app.on_event("startup")
     async def startup() -> None:
         database.initialize()
+        resumed = await task_dispatcher.resume_pending()
+        if resumed:
+            print(f"📥 恢复排队任务: {resumed} 个")
 
     @app.get("/api/v1/health")
     async def health() -> dict[str, Any]:
@@ -103,15 +118,54 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "whisper_ready": whisper_ready,
             "whisper_error": whisper_error,
             "queue_backend": task_dispatcher.backend_name,
+            "active_tasks": database.count_running_tasks_global(),
+            "queue_depth": database.count_queued_tasks("PENDING"),
         }
 
     @app.get("/api/v1/tasks")
     async def list_tasks() -> dict[str, Any]:
         return {"items": database.list_spec_nodes()}
 
+    @app.get("/api/v1/sessions/{session_id}")
+    async def get_session(session_id: str) -> dict[str, Any]:
+        row = database.get_session(session_id)
+        if not row:
+            return {"session_id": session_id, "found": False, "session": None}
+        return {"session_id": session_id, "found": True, "session": row}
+
     @app.get("/api/v1/sessions")
     async def list_sessions() -> dict[str, Any]:
         return {"items": database.list_sessions()}
+
+    @app.get("/api/v1/tasks/{node_id}/runs")
+    async def get_task_runs(node_id: str) -> dict[str, Any]:
+        node = database.get_spec_node(node_id)
+        if not node:
+            return {"node_id": node_id, "runs": [], "node": None}
+        return {"node_id": node_id, "node": node, "runs": database.list_task_runs_for_node(node_id)}
+
+    @app.post("/api/v1/tasks/{node_id}/cancel")
+    async def cancel_running_task(node_id: str) -> dict[str, Any]:
+        return await task_dispatcher.cancel_running(node_id)
+
+    @app.get("/api/v1/sessions/{session_id}/tasks")
+    async def list_session_tasks(session_id: str) -> dict[str, Any]:
+        return {
+            "session_id": session_id,
+            "tasks": database.list_spec_nodes(session_id=session_id),
+            "progress": orchestrator.progress.snapshot(session_id),
+            "events": orchestrator.events.list_for_session(session_id, limit=30),
+        }
+
+    @app.post("/api/v1/sessions/{session_id}/tasks/confirm")
+    async def confirm_session_tasks(session_id: str, body: TaskConfirmRequest) -> dict[str, Any]:
+        return await orchestrator.coordinator.confirm(
+            session_id, body.node_ids, confirm_all=body.confirm_all,
+        )
+
+    @app.post("/api/v1/sessions/{session_id}/tasks/cancel")
+    async def cancel_session_tasks(session_id: str, body: TaskCancelRequest) -> dict[str, Any]:
+        return await orchestrator.proposals.cancel(session_id, body.node_ids)
 
     @app.post("/api/v1/sessions")
     async def create_session(session: SessionItem) -> dict[str, str]:
