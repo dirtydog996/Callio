@@ -43,13 +43,13 @@ def _get_preload_lock() -> asyncio.Lock:
 def _load_funasr_sync(model_name: str) -> Any:
     from funasr import AutoModel  # noqa: PLC0415
 
-    print(f"\n⏳ 正在加载 FunASR 模型 ({model_name})...")
+    logger.info("Loading FunASR model: %s", model_name)
     model = AutoModel(
         model=model_name,
         trust_remote_code=True,
         disable_update=True,
     )
-    print(f"✅ FunASR 模型已就绪: {model_name}")
+    logger.info("FunASR model ready: %s", model_name)
     return model
 
 
@@ -77,7 +77,7 @@ async def preload_funasr(settings: Settings) -> None:
         except Exception as exc:
             _preload_error = str(exc)
             logger.exception("FunASR preload failed")
-            print(f"\n❌ FunASR 模型预加载失败: {exc}")
+            logger.warning("FunASR preload failed: %s", exc)
         finally:
             _ready.set()
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 方案一：mkcert + HTTPS，一键启动 Callio 供手机局域网测试
+# mkcert + HTTPS — one-command Callio startup for LAN mobile testing
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,13 +23,13 @@ ensure_mkcert() {
     return 0
   fi
   if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
-    echo "未检测到 mkcert，正在通过 Homebrew 安装..."
+    echo "mkcert not found — installing via Homebrew..."
     brew install mkcert
     return 0
   fi
-  echo "错误: 未找到 mkcert。"
+  echo "Error: mkcert not found."
   echo "macOS: brew install mkcert"
-  echo "其他系统: https://github.com/FiloSottile/mkcert#installation"
+  echo "Other systems: https://github.com/FiloSottile/mkcert#installation"
   exit 1
 }
 
@@ -56,28 +56,28 @@ PY
 
 ensure_mkcert
 
-echo "==> 安装/更新 mkcert 本地 CA（首次可能需要输入密码）"
+echo "==> Installing/updating mkcert local CA (may prompt for password on first run)"
 mkcert -install
 
 mkdir -p "$CERT_DIR"
 LAN_IP="$(detect_lan_ip)"
-echo "==> 局域网 IP: $LAN_IP"
+echo "==> LAN IP: $LAN_IP"
 
 if [[ ! -f "$CERT_FILE" || ! -f "$KEY_FILE" || "$(cat "$LAN_IP_FILE" 2>/dev/null || true)" != "$LAN_IP" ]]; then
-  echo "==> 生成 HTTPS 证书 ($LAN_IP, localhost, 127.0.0.1)"
+  echo "==> Generating HTTPS certificate ($LAN_IP, localhost, 127.0.0.1)"
   mkcert -cert-file "$CERT_FILE" -key-file "$KEY_FILE" "$LAN_IP" localhost 127.0.0.1
   echo "$LAN_IP" > "$LAN_IP_FILE"
 else
-  echo "==> 复用已有证书: $CERT_FILE"
+  echo "==> Reusing existing certificate: $CERT_FILE"
 fi
 
 export CALLIO_SSL_CERT="$CERT_FILE"
 export CALLIO_SSL_KEY="$KEY_FILE"
 
 echo ""
-echo "==> 启动 Callio (HTTPS)，手机请扫终端二维码"
-echo "    iPhone 首次使用需在「设置 → 证书信任设置」中信任 mkcert 根证书"
-echo "    详见 docs/mobile-testing.md"
+echo "==> Starting Callio (HTTPS) — scan the QR code in the terminal with your phone"
+echo "    iPhone: trust the mkcert root CA via Settings → General → About → Certificate Trust Settings"
+echo "    See docs/mobile-testing.md for details"
 echo ""
 
 exec "$PYTHON" -m callio "$@"

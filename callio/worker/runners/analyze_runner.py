@@ -38,9 +38,9 @@ class AnalyzeRunner:
 
         repo_ctx = collect_repo_context(description, self.settings)
         prompt = (
-            "你是 Callio 分析助手。结合仓库上下文，针对需求给出简洁 Markdown 报告（不超过 400 字）。\n\n"
-            f"【需求】\n{description}\n\n"
-            f"【仓库上下文】\n{repo_ctx}"
+            "You are a Callio analysis assistant. Using the repository context below, provide a concise Markdown report (max 400 words) for the requirement.\n\n"
+            f"[Requirement]\n{description}\n\n"
+            f"[Repository Context]\n{repo_ctx}"
         )
 
         try:

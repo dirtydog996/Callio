@@ -30,7 +30,7 @@ def _mp3_bytes_to_pcm(mp3_bytes: bytes, target_rate: int) -> bytes:
     """Convert raw MP3 bytes to 16-bit mono PCM at *target_rate* Hz via ffmpeg."""
     if not shutil.which("ffmpeg"):
         raise RuntimeError(
-            "EdgeTTS 需要 ffmpeg 进行 MP3→PCM 转换，请安装 ffmpeg：\n"
+            "EdgeTTS requires ffmpeg for MP3→PCM conversion. Install ffmpeg:\n"
             "  macOS: brew install ffmpeg\n"
             "  Ubuntu: apt install ffmpeg"
         )
@@ -71,7 +71,7 @@ def create_edge_tts(settings: Settings, *, sample_rate: int) -> TTSService:
             try:
                 import edge_tts  # noqa: PLC0415
             except ImportError:
-                logger.error("edge-tts 未安装，请执行: pip install edge-tts")
+                logger.error("edge-tts is not installed; run: pip install edge-tts")
                 yield None
                 return
 

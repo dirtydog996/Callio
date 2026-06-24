@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,8 @@ from callio.core.database import Database
 from callio.core.memory import MemoryHub
 from callio.orchestrator import Orchestrator
 from callio.worker.tasks import TaskDispatcher
+
+logger = logging.getLogger(__name__)
 
 
 class TodoItem(BaseModel):
@@ -103,7 +106,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         database.initialize()
         resumed = await task_dispatcher.resume_pending()
         if resumed:
-            print(f"📥 恢复排队任务: {resumed} 个")
+            logger.info("Resumed %d queued task(s)", resumed)
 
     @app.get("/api/v1/health")
     async def health() -> dict[str, Any]:

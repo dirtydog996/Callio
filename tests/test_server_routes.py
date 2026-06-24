@@ -44,9 +44,9 @@ class ServerRouteTests(unittest.TestCase):
         mobile_response = self.client.get("/app/mobile/index.html")
         shared_response = self.client.get("/app/shared/client.js")
         self.assertEqual(web_response.status_code, 200)
-        self.assertIn("Copilot 风格协作台", web_response.text)
+        self.assertIn("Copilot-style Workspace", web_response.text)
         self.assertEqual(mobile_response.status_code, 200)
-        self.assertIn("移动协作端", mobile_response.text)
+        self.assertIn("Mobile Workspace", mobile_response.text)
         self.assertEqual(shared_response.status_code, 200)
         self.assertIn("startSession", shared_response.text)
 

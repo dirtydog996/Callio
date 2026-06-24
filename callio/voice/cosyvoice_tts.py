@@ -8,7 +8,7 @@ Start the server:
 Usage:  CALLIO_TTS_BACKEND=cosyvoice  CALLIO_COSYVOICE_URL=http://localhost:9880
 
 API endpoint used:  POST /inference_sft
-  Body (JSON):  {"tts_text": "...", "spk_id": "中文女"}
+  Body (JSON):  {"tts_text": "...", "spk_id": "<CosyVoice speaker id>"}
   Response:     audio/wav bytes (streamed)
 """
 from __future__ import annotations
@@ -44,7 +44,7 @@ def _cosyvoice_synthesize(base_url: str, text: str, spk_id: str, target_rate: in
 def create_cosyvoice_tts(settings: Settings, *, sample_rate: int) -> TTSService:
     """Return a Pipecat-compatible CosyVoice TTS service (HTTP-API mode)."""
     base_url = settings.cosyvoice_base_url or "http://localhost:9880"
-    # Default speaker – change via CALLIO_COSYVOICE_URL or use custom API
+    # CosyVoice speaker ID — override via CALLIO_COSYVOICE_URL or custom API
     spk_id = "中文女"
 
     class CosyVoiceTTSService(TTSService):
@@ -82,7 +82,7 @@ def create_cosyvoice_tts(settings: Settings, *, sample_rate: int) -> TTSService:
                 logger.info("Streamed assistant audio via CosyVoice (%d bytes PCM)", len(pcm))
             except requests.exceptions.ConnectionError:
                 logger.error(
-                    "无法连接 CosyVoice 服务器 %s，请先启动服务器", self._base_url
+                    "Cannot connect to CosyVoice server %s — please start the server first", self._base_url
                 )
             except Exception as exc:
                 logger.warning("CosyVoice TTS failed: %s", exc)

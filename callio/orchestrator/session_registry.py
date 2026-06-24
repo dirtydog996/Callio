@@ -32,14 +32,14 @@ class SessionRegistry:
         if resume_session_id:
             existing = self.database.get_session(resume_session_id)
             if existing:
-                label = str(existing.get("title") or title or f"语音会话 {resume_session_id[:8]}")
+                label = str(existing.get("title") or title or f"voice-session-{resume_session_id[:8]}")
                 self.database.update_session(resume_session_id, clear_ended_at=True)
                 ctx = SessionContext(session_id=resume_session_id, title=label, resumed=True)
                 self._active[connection_id] = ctx
                 return ctx
 
         session_id = str(uuid.uuid4())
-        label = title or f"语音会话 {session_id[:8]}"
+        label = title or f"voice-session-{session_id[:8]}"
         self.database.create_session(session_id, label)
         ctx = SessionContext(session_id=session_id, title=label)
         self._active[connection_id] = ctx

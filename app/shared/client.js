@@ -54,17 +54,17 @@
 
     // ---- Session report modal ----
     const _STATUS_INFO = {
-        COMPLETED: { icon: "✓", label: "已完成", cls: "completed" },
-        SUCCESS:   { icon: "✓", label: "已完成", cls: "completed" },
-        PENDING:   { icon: "◎", label: "待确认", cls: "pending" },
-        CONFIRMED: { icon: "◉", label: "待执行", cls: "pending" },
-        RUNNING:   { icon: "⟳", label: "执行中", cls: "running" },
-        FAILED:    { icon: "✗", label: "已失败", cls: "failed" },
-        CANCELLED: { icon: "⊘", label: "已取消", cls: "failed" },
+        COMPLETED: { icon: "✓", label: "Completed", cls: "completed" },
+        SUCCESS:   { icon: "✓", label: "Completed", cls: "completed" },
+        PENDING:   { icon: "◎", label: "Pending confirmation", cls: "pending" },
+        CONFIRMED: { icon: "◉", label: "Pending execution", cls: "pending" },
+        RUNNING:   { icon: "⟳", label: "Running", cls: "running" },
+        FAILED:    { icon: "✗", label: "Failed", cls: "failed" },
+        CANCELLED: { icon: "⊘", label: "Cancelled", cls: "failed" },
     };
 
     function _statusInfo(status) {
-        return _STATUS_INFO[(status || "").toUpperCase()] || { icon: "·", label: status || "未知", cls: "" };
+        return _STATUS_INFO[(status || "").toUpperCase()] || { icon: "·", label: status || "Unknown", cls: "" };
     }
 
     async function showSessionReport(sessionId) {
@@ -95,12 +95,12 @@
         header.className = "modal-header";
         const titleEl = document.createElement("h2");
         titleEl.className = "modal-title";
-        titleEl.textContent = `📋 ${session.title || "通话结束报告"}`;
+        titleEl.textContent = `📋 ${session.title || "Call Summary"}`;
         const closeBtn = document.createElement("button");
         closeBtn.type = "button";
         closeBtn.className = "ghost-btn";
         closeBtn.style.padding = "8px 16px";
-        closeBtn.textContent = "关闭";
+        closeBtn.textContent = "Close";
         closeBtn.onclick = () => overlay.remove();
         header.append(titleEl, closeBtn);
         modal.appendChild(header);
@@ -111,10 +111,10 @@
         try {
             const ts = session.ended_at || session.created_at;
             metaEl.textContent = ts
-                ? `通话时间：${new Date(ts).toLocaleString("zh-CN")}`
-                : "通话已结束";
+                ? `Call time: ${new Date(ts).toLocaleString("en-US")}`
+                : "Call ended";
         } catch (_) {
-            metaEl.textContent = "通话已结束";
+            metaEl.textContent = "Call ended";
         }
         modal.appendChild(metaEl);
 
@@ -122,7 +122,7 @@
         if (session.summary) {
             const sumLabel = document.createElement("div");
             sumLabel.className = "modal-section-label";
-            sumLabel.textContent = "会话摘要";
+            sumLabel.textContent = "Session Summary";
             const sumText = document.createElement("div");
             sumText.className = "modal-summary-text";
             sumText.textContent = session.summary;
@@ -133,7 +133,7 @@
         if (tasks.length) {
             const todoLabel = document.createElement("div");
             todoLabel.className = "modal-section-label";
-            todoLabel.textContent = `待办任务（${tasks.length}）`;
+            todoLabel.textContent = `Tasks (${tasks.length})`;
             modal.appendChild(todoLabel);
             tasks.forEach((task) => {
                 const si = _statusInfo(task.status);
@@ -172,7 +172,7 @@
         const doneBtn = document.createElement("button");
         doneBtn.type = "button";
         doneBtn.className = "primary-btn";
-        doneBtn.textContent = "完成";
+        doneBtn.textContent = "Done";
         doneBtn.onclick = () => overlay.remove();
         footer.appendChild(doneBtn);
         modal.appendChild(footer);
@@ -195,8 +195,8 @@
         const div = document.createElement("div");
         div.className = `message ${role}`;
         const meta = document.createElement("small");
-        const _msgTime = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-        meta.textContent = `${label || (role === "user" ? "你" : "Callio")} · ${_msgTime}`;
+        const _msgTime = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+        meta.textContent = `${label || (role === "user" ? "You" : "Callio")} · ${_msgTime}`;
         const body = document.createElement("div");
         body.textContent = text;
         div.append(meta, body);
@@ -211,7 +211,7 @@
 
     function resetLiveReport() {
         if (!elements.liveReport) return;
-        elements.liveReport.innerHTML = "<p class='empty-state'>开始对话后，这里会实时记录用户与助手的文本内容。</p>";
+        elements.liveReport.innerHTML = "<p class='empty-state'>User and assistant text appears here live after the conversation starts.</p>";
     }
 
     function addLiveReport(role, text, label) {
@@ -221,13 +221,13 @@
         const item = document.createElement("div");
         item.className = `report-item ${role}`;
         const time = new Date().toLocaleTimeString();
-        item.textContent = `[${time}] ${label || (role === "user" ? "你" : "Callio")}: ${text}`;
+        item.textContent = `[${time}] ${label || (role === "user" ? "You" : "Callio")}: ${text}`;
         elements.liveReport.prepend(item);
     }
 
     function formatSessionLabel(session) {
         const title = session.title || (session.session_id || "").slice(0, 8);
-        const ended = session.ended_at ? "已结束" : "进行中";
+        const ended = session.ended_at ? "Ended" : "Active";
         return `${title} · ${ended}`;
     }
 
@@ -248,7 +248,7 @@
         if (!items.length) {
             const empty = document.createElement("p");
             empty.className = "empty-state";
-            empty.textContent = "还没有历史会话，直接开始新对话即可。";
+            empty.textContent = "No previous sessions yet — start a new conversation.";
             elements.sessions.appendChild(empty);
             return;
         }
@@ -291,9 +291,9 @@
             const text = line.trim();
             if (!text) return;
             if (text.startsWith("user:")) {
-                addMessage("user", text.slice(5).trim(), "历史记录");
+                addMessage("user", text.slice(5).trim(), "History");
             } else if (text.startsWith("assistant:")) {
-                addMessage("assistant", text.slice(10).trim(), "历史记录");
+                addMessage("assistant", text.slice(10).trim(), "History");
             }
         });
     }
@@ -305,9 +305,9 @@
         resetLiveReport();
         renderStoredTranscript(data.session.transcript || "");
         if (data.session.summary) {
-            addMessage("assistant", `续聊摘要：${data.session.summary}`, "摘要");
+            addMessage("assistant", `Resumed summary: ${data.session.summary}`, "Summary");
         }
-        elements.resumeLabel.textContent = `当前目标会话：${data.session.title || sessionId.slice(0, 8)}`;
+        elements.resumeLabel.textContent = `Current target session: ${data.session.title || sessionId.slice(0, 8)}`;
     }
 
     function taskCardClass(status) {
@@ -315,7 +315,7 @@
     }
 
     function taskTitle(event) {
-        return event.feature_name || event.title || event.node_id || "任务";
+        return event.feature_name || event.title || event.node_id || "Task";
     }
 
     function currentSessionRef() {
@@ -369,12 +369,12 @@
             const confirmBtn = document.createElement("button");
             confirmBtn.type = "button";
             confirmBtn.className = "primary-btn";
-            confirmBtn.textContent = "确认";
+            confirmBtn.textContent = "Confirm";
             confirmBtn.onclick = () => postTaskAction("confirm", [nodeId]);
             const cancelBtn = document.createElement("button");
             cancelBtn.type = "button";
             cancelBtn.className = "ghost-btn";
-            cancelBtn.textContent = "取消";
+            cancelBtn.textContent = "Cancel";
             cancelBtn.onclick = () => postTaskAction("cancel", [nodeId]);
             actions.append(confirmBtn, cancelBtn);
         }
@@ -383,7 +383,7 @@
             const stopBtn = document.createElement("button");
             stopBtn.type = "button";
             stopBtn.className = "danger-btn";
-            stopBtn.textContent = "停止";
+            stopBtn.textContent = "Stop";
             stopBtn.onclick = () => cancelRunningTask(nodeId);
             actions.appendChild(stopBtn);
         }
@@ -396,7 +396,7 @@
     async function refreshSessionTasks(targetSessionId) {
         const sessionRef = targetSessionId || currentSessionRef();
         if (!sessionRef) {
-            elements.tasks.innerHTML = "<p class='empty-state'>开始对话后，这里会展示后台任务与状态流。</p>";
+            elements.tasks.innerHTML = "<p class='empty-state'>Background tasks and status updates appear here after you start a conversation.</p>";
             state.taskNodes.clear();
             return;
         }
@@ -405,7 +405,7 @@
         state.taskNodes.clear();
         const rows = [...(data.tasks || [])].reverse();
         if (!rows.length) {
-            elements.tasks.innerHTML = "<p class='empty-state'>当前会话还没有后台任务。</p>";
+            elements.tasks.innerHTML = "<p class='empty-state'>No background tasks yet for this session.</p>";
         }
         rows.forEach((task) => {
             renderTask({
@@ -433,13 +433,13 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         });
-        addMessage("assistant", data.message || `任务已${action}`, "操作反馈");
+        addMessage("assistant", data.message || `Task ${action}`, "Action Feedback");
         await refreshSessionTasks(sessionRef);
     }
 
     async function cancelRunningTask(nodeId) {
         const data = await requestJson(`/api/v1/tasks/${encodeURIComponent(nodeId)}/cancel`, { method: "POST" });
-        addMessage("assistant", data.message || "已请求停止任务", "操作反馈");
+        addMessage("assistant", data.message || "Stop requested", "Action Feedback");
         await refreshSessionTasks();
     }
 
@@ -513,31 +513,31 @@
     function microphoneErrorMessage(error) {
         const name = error && error.name ? error.name : "";
         if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-            return "麦克风权限被拒绝，请在浏览器设置中允许访问后重试。";
+            return "Microphone permission was denied. Allow access in your browser settings and try again.";
         }
         if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-            return "未检测到可用麦克风，请检查设备设置。";
+            return "No microphone was detected. Check your device settings.";
         }
         if (name === "SecurityError" || name === "NotSupportedError") {
-            return "当前访问方式不支持麦克风；手机请改用 HTTPS。";
+            return "This access method does not support microphone use; on mobile, switch to HTTPS.";
         }
-        return error && error.message ? error.message : "无法启动麦克风";
+        return error && error.message ? error.message : "Could not start the microphone";
     }
 
     function ensureMicrophoneSupported() {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            throw new Error("当前浏览器不支持麦克风访问。");
+            throw new Error("This browser does not support microphone access.");
         }
         const host = window.location.hostname;
         const isLocalhost = host === "localhost" || host === "127.0.0.1";
         if (!window.isSecureContext && !isLocalhost) {
-            throw new Error("当前为 HTTP 非安全连接，手机无法使用麦克风。请改用 HTTPS。");
+            throw new Error("This is an insecure HTTP connection, so mobile cannot use the microphone. Switch to HTTPS.");
         }
     }
 
     async function requestMicrophone() {
         ensureMicrophoneSupported();
-        setStatus("warning", "等待权限", "请允许浏览器使用麦克风。");
+        setStatus("warning", "Waiting for permission", "Please allow the browser to use the microphone.");
         state.mediaStream = await navigator.mediaDevices.getUserMedia({
             audio: {
                 channelCount: 1,
@@ -593,9 +593,9 @@
             if (data.type === "session") {
                 state.sessionId = data.session_id;
                 if (data.resumed) {
-                    setStatus("success", "续聊中", data.title || state.sessionId.slice(0, 8));
+                    setStatus("success", "Resuming session", data.title || state.sessionId.slice(0, 8));
                 } else {
-                    setStatus("success", "语音已连接", "可以直接开始说话。");
+                    setStatus("success", "Voice connected", "You can start speaking now.");
                 }
                 await refreshSessionTasks(state.sessionId);
             } else if (data.type === "transcription") {
@@ -611,21 +611,21 @@
         state.ws.onerror = (error) => {
             console.error("WebSocket error", error);
             if (connected) {
-                setStatus("danger", "连接错误", "语音通道已断开。");
+                setStatus("danger", "Connection error", "The voice channel was disconnected.");
                 stopSession(true);
             }
         };
 
         state.ws.onclose = () => {
             if (state.isRecording) {
-                setStatus("danger", "已断开", "语音会话已关闭。");
+                setStatus("danger", "Disconnected", "The voice session has closed.");
                 stopSession(true);
             }
         };
 
         return new Promise((resolve, reject) => {
             state.ws.addEventListener("error", () => {
-                if (!connected) reject(new Error("WebSocket 连接失败"));
+                if (!connected) reject(new Error("WebSocket connection failed"));
             }, { once: true });
             state.ws.onopen = () => {
                 connected = true;
@@ -665,11 +665,11 @@
             state.isRecording = true;
             document.body.setAttribute("data-recording", "true");
             elements.stopBtn.disabled = false;
-            setStatus("success", "已连接", "全双工语音已启动。");
+            setStatus("success", "Connected", "Full-duplex voice is running.");
         } catch (error) {
             console.error(error);
-            showToast(`启动失败：${microphoneErrorMessage(error)}`, "danger", 6000);
-            setStatus("danger", "启动失败", microphoneErrorMessage(error));
+            showToast(`Start failed: ${microphoneErrorMessage(error)}`, "danger", 6000);
+            setStatus("danger", "Start failed", microphoneErrorMessage(error));
             stopSession(true);
         }
     }
@@ -689,7 +689,7 @@
         elements.stopBtn.disabled = true;
         state.sessionId = null;
         if (!skipStatusUpdate) {
-            setStatus("", "已断开", "对话已结束。");
+            setStatus("", "Disconnected", "Conversation ended.");
         }
         resetLiveReport();
         loadSessionOptions();
@@ -700,7 +700,7 @@
 
     function summarizeTitle(text) {
         const clean = text.trim();
-        if (!clean) return "手动任务";
+        if (!clean) return "Manual task";
         return clean.length > 24 ? `${clean.slice(0, 24)}…` : clean;
     }
 
@@ -719,7 +719,7 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
         });
-        addMessage("assistant", `已派发任务：${featureName}（${data.node_id}）`, "任务中心");
+        addMessage("assistant", `Dispatched task: ${featureName} (${data.node_id})`, "Task Center");
         elements.taskInput.value = "";
         elements.taskTitle.value = "";
         await refreshSessionTasks();
@@ -752,7 +752,7 @@
         try {
             await dispatchManualTask();
         } catch (error) {
-            showToast(`任务派发失败：${error.message}`, "danger");
+            showToast(`Task dispatch failed: ${error.message}`, "danger");
         }
     });
 
@@ -762,8 +762,8 @@
     resetLiveReport();
 
     if (mode === "mobile") {
-        setStatus("warning", "移动端就绪", "推荐使用 HTTPS 访问以启用麦克风。");
+        setStatus("warning", "Mobile ready", "Use HTTPS to enable microphone access.");
     } else {
-        setStatus("warning", "待连接", "选择历史会话或开始新一轮语音协作。");
+        setStatus("warning", "Disconnected", "Choose a previous session or start a new voice collaboration round.");
     }
 })();

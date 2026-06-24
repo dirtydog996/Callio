@@ -8,6 +8,7 @@ import logging
 from callio.config.settings import get_settings
 from callio.core.database import Database
 from callio.core.memory import MemoryHub
+from callio.logging_config import configure_logging
 from callio.worker.tasks import TaskDispatcher
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ async def _run() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging()
     asyncio.run(_run())
 
 

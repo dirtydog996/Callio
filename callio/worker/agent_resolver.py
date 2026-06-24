@@ -61,8 +61,8 @@ class AgentResolver:
     def missing_message(self) -> str:
         names = "/".join(_DETECT_ORDER)
         return (
-            f"未找到可用的编码 Agent。请安装 {names} 中的任意一个，"
-            "或设置 CALLIO_AGENT_BACKEND / CALLIO_AGENT_COMMAND（支持 {task}）。"
+            f"No coding agent found. Please install one of: {names}, "
+            "or set CALLIO_AGENT_BACKEND / CALLIO_AGENT_COMMAND (supports {task})."
         )
 
     def _from_custom(self, command: str, task: str) -> ResolvedAgent | None:

@@ -108,7 +108,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             await websocket.accept()
             await websocket.send_json({
                 "type": "assistant",
-                "text": "语音依赖未安装，状态与任务接口已可用。",
+                "text": "Voice dependencies not installed; status and task APIs are available.",
             })
             await websocket.close()
             return
@@ -303,10 +303,10 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
         async def on_client_disconnected(_transport, _client_ws) -> None:
             await runner.cancel(reason="client disconnected")
 
-        print("\n⚡ 本地全双工语音管道已握手成功，开始处理音频流...")
+        logger.info("Full-duplex voice pipeline connected, processing audio stream")
         if session_id:
-            resumed_label = "（续聊）" if session_ctx and session_ctx.resumed else ""
-            print(f"📋 会话 ID: {session_id}{resumed_label}")
+            resumed_label = " (resumed)" if session_ctx and session_ctx.resumed else ""
+            logger.info("Session ID: %s%s", session_id, resumed_label)
         try:
             await runner.run(task)
         except WebSocketDisconnect:

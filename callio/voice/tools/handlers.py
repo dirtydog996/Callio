@@ -33,11 +33,11 @@ def create_tool_handlers(orchestrator: Orchestrator, session_id: str) -> dict[st
         transcript = orchestrator.transcripts.get_transcript(session_id)
         focus = params.arguments.get("focus", "")
         if focus:
-            transcript = f"侧重点: {focus}\n{transcript}"
+            transcript = f"Focus: {focus}\n{transcript}"
         await orchestrator.coordinator.dispatch_background_summary(session_id, transcript)
         await params.result_callback({
             "status": "scheduled",
-            "message": "已在后台生成摘要与行动计划。",
+            "message": "Summary and action plan generated in the background.",
         })
 
     return {

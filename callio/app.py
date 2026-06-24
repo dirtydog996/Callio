@@ -15,6 +15,7 @@ load_dotenv()
 
 from callio.config.settings import Settings, get_settings
 from callio.core.server import create_app
+from callio.logging_config import configure_logging
 from callio.voice.pipeline import register_voice_routes
 from callio.web import MOBILE_CLIENT_PATH, WEB_CLIENT_PATH
 
@@ -56,14 +57,14 @@ def show_local_qr(settings: Settings | None = None) -> None:
     web_url = f"{base_url}{WEB_CLIENT_PATH}"
     mobile_url = f"{base_url}{MOBILE_CLIENT_PATH}"
     print("\n=======================================================")
-    print("🏠 Callio 服务已启动！")
-    print(f"🖥️  Web 端: {web_url}")
-    print(f"📱 手机端: {mobile_url}")
+    print("🏠 Callio is ready!")
+    print(f"🖥️  Web client: {web_url}")
+    print(f"📱 Mobile client: {mobile_url}")
     if runtime_settings.ssl_certfile and runtime_settings.ssl_keyfile:
-        print("🔒 已启用 HTTPS，手机端可使用麦克风")
+        print("🔒 HTTPS enabled — microphone works on mobile")
     else:
-        print("⚠️  当前为 HTTP，iPhone 扫码后通常无法使用麦克风")
-        print("   请配置 CALLIO_SSL_CERT / CALLIO_SSL_KEY 启用 HTTPS")
+        print("⚠️  HTTP mode — iPhone usually cannot use microphone via QR code")
+        print("   Configure CALLIO_SSL_CERT / CALLIO_SSL_KEY to enable HTTPS")
     print("=======================================================")
 
     qr = qrcode.QRCode(version=1, border=1, box_size=1)
@@ -78,6 +79,8 @@ def show_local_qr(settings: Settings | None = None) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
+    configure_logging()
+
     import uvicorn
 
     args = list(argv if argv is not None else sys.argv[1:])

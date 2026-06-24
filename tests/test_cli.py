@@ -13,9 +13,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(build_url("http://localhost:8000/", "/api/v1/health"), "http://localhost:8000/api/v1/health")
 
     def test_dispatch_payload_derives_title(self) -> None:
-        payload = build_dispatch_payload("", "整理当前交互界面的任务清单并生成执行建议")
+        payload = build_dispatch_payload("", "Reorganize the current UI task list and generate execution recommendations")
         self.assertEqual(payload["difficulty_level"], 1)
-        self.assertEqual(payload["description"], "整理当前交互界面的任务清单并生成执行建议")
+        self.assertEqual(payload["description"], "Reorganize the current UI task list and generate execution recommendations")
         self.assertTrue(payload["feature_name"])
 
 

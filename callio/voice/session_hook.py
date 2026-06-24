@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class SessionHook(FrameProcessor):
-    """转写采集 + 动态进度/记忆注入 + 打断时通知客户端。"""
+    """Transcript capture + dynamic progress/memory injection + barge-in client notification."""
 
     def __init__(
         self,

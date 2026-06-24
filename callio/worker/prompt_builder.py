@@ -12,16 +12,16 @@ def build_execute_prompt(database: Database, node_id: str, session_id: str) -> s
     actions = _actions_for_node(database, session_id, node_id)
 
     lines = [
-        f"【任务】{node.get('feature_name', '')}",
-        f"【说明】{node.get('description', '')}",
+        f"[Task] {node.get('feature_name', '')}",
+        f"[Description] {node.get('description', '')}",
     ]
     summary = session.get("summary")
     if summary:
-        lines.append(f"【会话摘要】{summary}")
+        lines.append(f"[Session Summary] {summary}")
     if actions:
-        lines.append("【行动清单】")
+        lines.append("[Action Items]")
         lines.extend(f"- {item}" for item in actions)
-    lines.append("请自主修改本地文件并运行测试验证。")
+    lines.append("Autonomously modify local files and run tests to verify.")
     return "\n".join(lines)
 
 
