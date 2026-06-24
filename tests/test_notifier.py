@@ -1,10 +1,26 @@
 from __future__ import annotations
 
+import importlib.util
+import pathlib
+import sys
 import unittest
 from unittest.mock import patch
 
 from callio.config.settings import Settings
-from callio.voice.notifier import build_session_notification_payload, notify_session_finished
+
+
+def _load_notifier_module():
+    base = pathlib.Path(__file__).parent.parent / "callio" / "voice" / "notifier.py"
+    spec = importlib.util.spec_from_file_location("callio.voice.notifier", base)
+    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    sys.modules["callio.voice.notifier"] = mod
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+_notifier = _load_notifier_module()
+build_session_notification_payload = _notifier.build_session_notification_payload
+notify_session_finished = _notifier.notify_session_finished
 
 
 class NotifierTests(unittest.TestCase):
@@ -45,6 +61,7 @@ class NotifierTests(unittest.TestCase):
 
     @patch("callio.voice.notifier.requests.post")
     def test_send_to_configured_webhooks(self, post_mock) -> None:
+        post_mock.return_value.status_code = 200
         settings = Settings(
             notify_wechat_webhook="https://example.com/wechat",
             notify_discord_webhook="https://example.com/discord",
