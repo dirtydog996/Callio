@@ -128,26 +128,36 @@ def create_whisper_stt(settings: Settings):
                 return
 
             await self.start_processing_metrics()
-            audio_float = np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0
+            text: str = ""
+            exc: BaseException | None = None
+            try:
+                audio_float = np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0
 
-            language = assert_given(self._settings.language)
-            whisper_lang = language_to_whisper_language(language) if language else None
-            segments, _ = await asyncio.to_thread(
-                self._model.transcribe,
-                audio_float,
-                language=whisper_lang,
-            )
+                language = assert_given(self._settings.language)
+                whisper_lang = language_to_whisper_language(language) if language else None
 
-            text = ""
-            no_speech_prob_threshold = assert_given(self._settings.no_speech_prob)
-            for segment in segments:
-                if (
-                    no_speech_prob_threshold is not None
-                    and segment.no_speech_prob < no_speech_prob_threshold
-                ):
-                    text += f"{segment.text} "
+                def _transcribe_sync():
+                    segs, _ = self._model.transcribe(audio_float, language=whisper_lang)
+                    return list(segs)
 
-            await self.stop_processing_metrics()
+                segments = await asyncio.to_thread(_transcribe_sync)
+
+                no_speech_prob_threshold = assert_given(self._settings.no_speech_prob)
+                for segment in segments:
+                    if (
+                        no_speech_prob_threshold is not None
+                        and segment.no_speech_prob < no_speech_prob_threshold
+                    ):
+                        text += f"{segment.text} "
+            except Exception as e:
+                exc = e
+            finally:
+                await self.stop_processing_metrics()
+
+            if exc is not None:
+                logger.error("Whisper transcription error: %s", exc)
+                yield ErrorFrame(error=f"Whisper transcription error: {exc}")
+                return
 
             if text.strip():
                 logger.info("Whisper transcription: %s", text.strip())
