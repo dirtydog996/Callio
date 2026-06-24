@@ -22,7 +22,7 @@ SAMPLE_RATE = 16000
 CHUNK_SAMPLES = 3200  # 200ms @ 16kHz
 
 
-def _generate_test_pcm(text: str = "你好") -> bytes:
+def _generate_test_pcm(text: str = "hello") -> bytes:
     with tempfile.TemporaryDirectory() as tmp:
         aiff = Path(tmp) / "test.aiff"
         wav = Path(tmp) / "test.wav"
@@ -51,7 +51,7 @@ async def _run_voice_round(
     ws_url: str,
     *,
     resume_session_id: str | None = None,
-    utterance: str = "你好",
+    utterance: str = "hello",
     timeout_sec: float = 120.0,
 ) -> dict:
     if resume_session_id:
@@ -124,7 +124,7 @@ async def _run_voice_round(
 async def main() -> int:
     parser = argparse.ArgumentParser(description="Callio voice E2E smoke test")
     parser.add_argument("--base-url", default=os.getenv("CALLIO_BASE_URL", "http://127.0.0.1:8000"))
-    parser.add_argument("--utterance", default="你好")
+    parser.add_argument("--utterance", default="hello")
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--resume-session-id", default="")
     parser.add_argument("--two-round-resume", action="store_true", help="run round1 then resume round2")
@@ -160,7 +160,7 @@ async def main() -> int:
         resume_result = await _run_voice_round(
             ws_url,
             resume_session_id=result["session_id"],
-            utterance="继续",
+            utterance="continue",
             timeout_sec=args.timeout,
         )
         print("      resumed session:", resume_result["session_id"])

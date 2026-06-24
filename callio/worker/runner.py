@@ -84,7 +84,7 @@ class WorkerRunner:
         max_attempts = self.settings.execute_max_retries
         for attempt in range(1, max_attempts + 1):
             if registry.is_cancelled(node_id):
-                self.database.update_spec_status(node_id, "CANCELLED", "用户取消", phase="CANCELLED")
+                self.database.update_spec_status(node_id, "CANCELLED", "user cancelled", phase="CANCELLED")
                 await progress_callback({
                     "event": "TASK_COMPLETED", "node_id": node_id,
                     "status": "CANCELLED", "progress": 100,
@@ -93,7 +93,7 @@ class WorkerRunner:
             await checkpoints.save(node_id, attempt)
             result = await self._run_command(session.workspace, resolved.argv, progress_callback, node_id)
             if registry.is_cancelled(node_id):
-                self.database.update_spec_status(node_id, "CANCELLED", "用户取消", phase="CANCELLED")
+                self.database.update_spec_status(node_id, "CANCELLED", "user cancelled", phase="CANCELLED")
                 await progress_callback({
                     "event": "TASK_COMPLETED", "node_id": node_id,
                     "status": "CANCELLED", "progress": 100,

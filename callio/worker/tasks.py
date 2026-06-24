@@ -75,7 +75,7 @@ class TaskDispatcher:
         except asyncio.TimeoutError:
             await registry.cancel(node_id)
             registry.clear(node_id)
-            error = f"任务超时（>{timeout}s）"
+            error = f"Task timed out (>{timeout}s)"
             self.database.update_spec_status(node_id, "FAILED", error, phase="FAILED")
             await self.status_manager.broadcast_status({
                 "event": "TASK_COMPLETED",

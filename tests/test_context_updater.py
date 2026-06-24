@@ -119,7 +119,7 @@ class ContextUpdaterTests(unittest.TestCase):
     # ------------------------------------------------------------------
     def test_progress_block_included_in_prompt(self) -> None:
         ctx = _FakeLLMContext([{"role": "system", "content": "old"}])
-        progress_text = "【任务进度】feature_a: RUNNING"
+        progress_text = "[Background Task Status] Active: feature_a(RUNNING)"
         orchestrator = _FakeOrchestrator(progress_text)
         settings = self._settings(progress_inject=True)
         refresh_system_prompt(ctx, orchestrator, "sess1", settings)

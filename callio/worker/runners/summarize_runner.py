@@ -45,9 +45,9 @@ class SummarizeRunner:
         })
 
         prompt = (
-            "你是 Callio 会话助手。根据以下通话转写，输出 JSON："
-            '{"summary":"一两句话摘要","action_plan":"Markdown 行动计划列表"}。'
-            "只输出 JSON，不要其他文字。\n\n"
+            "You are a Callio session assistant. Based on the following conversation transcript, output JSON: "
+            '{"summary":"one or two sentence summary","action_plan":"Markdown action plan list"}. '
+            "Output JSON only, no other text.\n\n"
             f"{transcript}"
         )
 

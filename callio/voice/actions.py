@@ -10,7 +10,7 @@ def hermes_tool_definition() -> dict:
     tools = all_tool_definitions()
     return tools[0] if tools else {
         "name": "propose_tasks",
-        "description": "提议后台任务",
+        "description": "Propose background tasks",
         "properties": {"tasks": {"type": "array", "items": {"type": "object"}}},
         "required": ["tasks"],
     }

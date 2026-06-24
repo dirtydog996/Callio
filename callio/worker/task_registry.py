@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class TaskRegistry:
-    """跟踪 RUNNING 子进程，支持取消。"""
+    """Tracks running subprocesses and supports cancellation."""
 
     def __init__(self) -> None:
         self._processes: dict[str, asyncio.subprocess.Process] = {}

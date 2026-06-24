@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>本地语音助手</title>
+    <title>Local Voice Assistant</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -127,36 +127,36 @@
     </style>
 </head>
 <body>
-    <h1>🎙️ 本地语音助手</h1>
+    <h1>🎙️ Local Voice Assistant</h1>
 
-    <div id="status" class="status disconnected">未连接</div>
+    <div id="status" class="status disconnected">Disconnected</div>
 
     <div class="controls">
         <label for="sessionSelect" style="display:block;text-align:center;margin-bottom:8px;color:#666;font-size:14px;">
-            会话
+            Session
             <select id="sessionSelect" style="margin-left:8px;padding:6px 10px;border-radius:6px;border:1px solid #ccc;max-width:260px;">
-                <option value="">新会话</option>
+                <option value="">New Session</option>
             </select>
         </label>
-        <button id="startBtn" onclick="startSession()">开始对话</button>
-        <button id="stopBtn" onclick="stopSession()" disabled>结束对话</button>
+        <button id="startBtn" onclick="startSession()">Start</button>
+        <button id="stopBtn" onclick="stopSession()" disabled>Stop</button>
     </div>
 
     <div class="transcript">
-        <h3>对话记录</h3>
+        <h3>Conversation</h3>
         <div id="messages"></div>
     </div>
 
     <div class="tasks">
-        <h3>后台任务 <button id="confirmAllBtn" onclick="confirmAllTasks()" style="font-size:12px">全部确认</button></h3>
+        <h3>Background Tasks <button id="confirmAllBtn" onclick="confirmAllTasks()" style="font-size:12px">Confirm All</button></h3>
         <div id="tasks"></div>
     </div>
 
     <div class="info">
-        <p>点击"开始对话"后，请立即允许麦克风权限</p>
-        <p>iPhone 通过局域网 IP 访问时，浏览器可能拒绝麦克风；可改用 HTTPS 或在本机浏览器打开</p>
-        <p>全双工：麦克风与回复语音均通过 WebSocket 传输 PCM 流（类似电话）</p>
-        <p>手机测试请使用 <code>./scripts/start-mobile-https.sh</code> 启动 HTTPS</p>
+        <p>After clicking Start, please grant microphone permission immediately.</p>
+        <p>When iPhone connects over a LAN IP, the browser may reject microphone access; use HTTPS or open it in a local browser instead.</p>
+        <p>Full-duplex: microphone audio and assistant audio are both streamed as PCM over WebSocket, similar to a phone call.</p>
+        <p>For mobile testing, start HTTPS with <code>./scripts/start-mobile-https.sh</code>.</p>
     </div>
 
     <script>
@@ -180,7 +180,7 @@
 
         function formatSessionLabel(session) {
             const title = session.title || session.session_id.slice(0, 8);
-            const ended = session.ended_at ? '已结束' : '进行中';
+            const ended = session.ended_at ? 'Ended' : 'Active';
             return `${title} (${ended})`;
         }
 
@@ -190,7 +190,7 @@
                 const data = await response.json();
                 const items = data.items || [];
                 const current = sessionSelect.value;
-                sessionSelect.innerHTML = '<option value="">新会话</option>';
+                sessionSelect.innerHTML = '<option value="">New Session</option>';
                 items.forEach((session) => {
                     const option = document.createElement('option');
                     option.value = session.session_id;
@@ -225,7 +225,7 @@
             messagesEl.innerHTML = '';
             renderStoredTranscript(data.session.transcript || '');
             if (data.session.summary) {
-                addMessage('bot', `（续聊摘要）${data.session.summary}`);
+                addMessage('bot', `(resumed: ${data.session.summary})`);
             }
         }
 
@@ -271,7 +271,7 @@
             div.className = cls;
             div.innerHTML = '';
 
-            const title = event.feature_name || event.title || nodeId || '任务';
+            const title = event.feature_name || event.title || nodeId || 'Task';
             const label = document.createElement('div');
             const progressPct = event.progress != null ? ` ${event.progress}%` : '';
             label.textContent = `[${event.event}] ${title} — ${status}${progressPct}`;
@@ -291,10 +291,10 @@
                 const actions = document.createElement('div');
                 actions.className = 'task-actions';
                 const confirmBtn = document.createElement('button');
-                confirmBtn.textContent = '确认';
+                confirmBtn.textContent = 'Confirm';
                 confirmBtn.onclick = () => postTaskAction('confirm', [nodeId]);
                 const cancelBtn = document.createElement('button');
-                cancelBtn.textContent = '取消';
+                cancelBtn.textContent = 'Cancel';
                 cancelBtn.onclick = () => postTaskAction('cancel', [nodeId]);
                 actions.append(confirmBtn, cancelBtn);
                 div.appendChild(actions);
@@ -304,7 +304,7 @@
                 const actions = document.createElement('div');
                 actions.className = 'task-actions';
                 const stopBtn = document.createElement('button');
-                stopBtn.textContent = '停止';
+                stopBtn.textContent = 'Stop';
                 stopBtn.onclick = () => cancelRunningTask(nodeId);
                 actions.appendChild(stopBtn);
                 div.appendChild(actions);
@@ -320,7 +320,7 @@
             try {
                 const res = await fetch(`/api/v1/tasks/${nodeId}/cancel`, { method: 'POST' });
                 const data = await res.json();
-                addMessage('bot', data.message || '已请求停止');
+                addMessage('bot', data.message || 'Stop requested');
             } catch (e) {
                 console.warn('cancel running failed', e);
             }
@@ -341,7 +341,7 @@
                     body: JSON.stringify(body),
                 });
                 const data = await res.json();
-                addMessage('bot', data.message || `任务已${action}`);
+                addMessage('bot', data.message || `Task ${action}`);
             } catch (e) {
                 console.warn('task action failed', e);
             }
@@ -435,37 +435,37 @@
         function microphoneErrorMessage(error) {
             const name = error && error.name ? error.name : '';
             if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-                return '麦克风权限被拒绝。请在浏览器设置中允许此页面访问麦克风，然后重试。';
+                return 'Microphone permission was denied. Allow microphone access for this page in your browser settings and try again.';
             }
             if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-                return '未检测到可用麦克风，请检查设备或系统麦克风设置。';
+                return 'No microphone was detected. Check your device or system microphone settings.';
             }
             if (name === 'NotReadableError' || name === 'TrackStartError') {
-                return '麦克风被其他应用占用，请关闭占用麦克风的程序后重试。';
+                return 'The microphone is in use by another app. Close the app using it and try again.';
             }
             if (name === 'SecurityError' || name === 'NotSupportedError') {
-                return '当前访问方式不支持麦克风。iPhone 请改用 HTTPS 访问，或使用本机浏览器打开 localhost。';
+                return 'This access method does not support microphone use. On iPhone, use HTTPS or open localhost in a local browser.';
             }
-            return (error && error.message) ? error.message : '无法启动麦克风';
+            return (error && error.message) ? error.message : 'Could not start the microphone';
         }
 
         function ensureMicrophoneSupported() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('当前浏览器不支持麦克风访问，请更换 Chrome / Safari 后重试。');
+                throw new Error('This browser does not support microphone access. Try Chrome or Safari.');
             }
 
             const host = window.location.hostname;
             const isLocalhost = host === 'localhost' || host === '127.0.0.1';
             if (!window.isSecureContext && !isLocalhost) {
                 throw new Error(
-                    '当前为 HTTP 非安全连接，手机无法使用麦克风。请运行 ./scripts/start-mobile-https.sh 后以 HTTPS 访问。'
+                    'This is an insecure HTTP connection, so mobile cannot use the microphone. Run ./scripts/start-mobile-https.sh and use HTTPS.'
                 );
             }
         }
 
         async function requestMicrophone() {
             ensureMicrophoneSupported();
-            updateStatus('connecting', '[1/2] 请允许麦克风权限（未弹出请检查 HTTPS）...');
+            updateStatus('connecting', '[1/2] Please allow microphone access (if no prompt appears, check HTTPS)...');
             mediaStream = await withTimeout(
                 navigator.mediaDevices.getUserMedia({
                     audio: {
@@ -476,7 +476,7 @@
                     }
                 }),
                 15000,
-                '麦克风权限请求超时：请确认使用 HTTPS，并在系统弹窗中点击「允许」'
+                'Microphone permission request timed out: make sure you are using HTTPS and click Allow in the system prompt.'
             );
         }
 
@@ -535,7 +535,7 @@
                     if (data.type === 'session') {
                         sessionId = data.session_id;
                         if (data.resumed) {
-                            updateStatus('connected', `续聊：${data.title || sessionId.slice(0, 8)}`);
+                            updateStatus('connected', `Resuming: ${data.title || sessionId.slice(0, 8)}`);
                         }
                     } else if (data.type === 'transcription') {
                         stopDownlinkPlayback();
@@ -551,7 +551,7 @@
             ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
                 if (connected) {
-                    updateStatus('disconnected', '连接错误');
+                    updateStatus('disconnected', 'Connection error');
                     stopSession();
                 }
             };
@@ -559,7 +559,7 @@
             ws.onclose = () => {
                 console.log('WebSocket closed');
                 if (isRecording) {
-                    updateStatus('disconnected', '已断开');
+                    updateStatus('disconnected', 'Disconnected');
                     stopSession();
                 }
             };
@@ -568,7 +568,7 @@
                 const initialErrorHandler = (error) => {
                     console.error('WebSocket connect error:', error);
                     if (!connected) {
-                        reject(new Error('WebSocket 连接失败'));
+                        reject(new Error('WebSocket connection failed'));
                     }
                 };
 
@@ -584,7 +584,7 @@
         function handleStartError(error) {
             console.error('Start session failed:', error);
             const message = microphoneErrorMessage(error);
-            alert('启动失败: ' + message);
+            alert('Start failed: ' + message);
             updateStatus('disconnected', message);
             stopSession();
         }
@@ -596,11 +596,11 @@
 
                 const resumeId = sessionSelect.value;
                 if (resumeId) {
-                    updateStatus('connecting', '[1/2] 加载历史会话...');
+                    updateStatus('connecting', '[1/2] Loading session history...');
                     await preloadResumeSession(resumeId);
                 }
 
-                updateStatus('connecting', resumeId ? '[2/2] 正在续聊...' : '[2/2] 正在连接语音服务...');
+                updateStatus('connecting', resumeId ? '[2/2] Resuming session...' : '[2/2] Connecting to voice service...');
                 connectStatusSocket();
                 await connectWebSocket();
 
@@ -612,7 +612,7 @@
                 stopBtn.disabled = false;
                 sessionSelect.disabled = true;
                 if (!resumeId) {
-                    updateStatus('connected', '全双工已连接，请说话...');
+                    updateStatus('connected', 'Full-duplex connected — speak now...');
                 }
             } catch (error) {
                 handleStartError(error);

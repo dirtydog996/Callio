@@ -22,7 +22,7 @@ class TaskProposal:
         preview_lines: list[str] = []
 
         for index, item in enumerate(tasks, start=1):
-            title = str(item.get("title", "")).strip() or f"任务{index}"
+            title = str(item.get("title", "")).strip() or f"Task {index}"
             description = str(item.get("description", "")).strip()
             kind = str(item.get("kind", TaskKind.EXECUTE.value)).upper()
             if kind not in {k.value for k in TaskKind}:
@@ -36,8 +36,8 @@ class TaskProposal:
                 session_id=session_id, kind=kind, phase="PROPOSED", status="DRAFT",
             )
             created.append({"node_id": node_id, "title": title, "kind": kind})
-            action_hint = f"（{len(actions)} 项行动）" if actions else ""
-            preview_lines.append(f"{index}. [{kind}] {title}{action_hint}：{description}")
+            action_hint = f" ({len(actions)} action(s))" if actions else ""
+            preview_lines.append(f"{index}. [{kind}] {title}{action_hint}: {description}")
 
             await self.event_bus.emit(session_id, "TASK_PROPOSED", {
                 "node_id": node_id, "title": title, "kind": kind,
@@ -48,7 +48,7 @@ class TaskProposal:
         return {
             "tasks": created,
             "preview_text": preview_text,
-            "message": f"已提议 {len(created)} 项任务，请向用户朗读并等待确认。",
+            "message": f"Proposed {len(created)} task(s) — please read the list to the user and wait for confirmation.",
         }
 
     async def cancel(self, session_id: str, node_ids: list[str]) -> dict[str, Any]:
@@ -62,4 +62,4 @@ class TaskProposal:
             self.database.update_spec_status(node_id, "CANCELLED", phase="CANCELLED")
             cancelled.append(node_id)
             await self.event_bus.emit(session_id, "TASK_CANCELLED", {"node_id": node_id})
-        return {"cancelled": cancelled, "message": f"已取消 {len(cancelled)} 项未确认任务。"}
+        return {"cancelled": cancelled, "message": f"Cancelled {len(cancelled)} unconfirmed task(s)."}

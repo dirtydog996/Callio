@@ -36,18 +36,18 @@ def _print_tts_diagnostics(exc: Exception) -> None:
         tf_version = transformers.__version__
         tf_path = getattr(transformers, "__file__", "?")
     except Exception:
-        tf_version = "未安装"
+        tf_version = "not installed"
         tf_path = "?"
 
-    print(f"\n--- TTS 诊断 ---")
+    print("\n--- TTS Diagnostics ---")
     print(f"Python: {sys.executable}")
     print(f"transformers: {tf_version} ({tf_path})")
     if "LlamaModel" in str(exc):
-        print(f"修复: {_TRANSFORMERS_FIX}")
-        print("请确认使用 venv 启动: ./venv/bin/python -m callio")
+        print(f"Fix: {_TRANSFORMERS_FIX}")
+        print("Make sure you are using the venv: ./venv/bin/python -m callio")
     elif "timed out" in str(exc).lower() or "github" in str(exc).lower():
-        print("修复: export CALLIO_HF_ENDPOINT=https://hf-mirror.com")
-        print("首次下载模型较慢，请耐心等待或稍后重试。")
+        print("Fix: export CALLIO_HF_ENDPOINT=https://hf-mirror.com")
+        print("First-time model download can be slow — please wait or retry later.")
 
 
 def _ensure_transformers_compatible() -> None:
@@ -55,21 +55,21 @@ def _ensure_transformers_compatible() -> None:
         import transformers
     except ImportError as exc:
         raise ImportError(
-            f"未安装 transformers，请先执行: {_TRANSFORMERS_FIX}"
+            f"transformers is not installed; run: {_TRANSFORMERS_FIX}"
         ) from exc
 
     version = transformers.__version__
     major = int(version.split(".", 1)[0])
     if major >= 5:
         raise ImportError(
-            f"transformers {version} 不兼容 ChatTTS（缺少 LlamaModel），请执行: {_TRANSFORMERS_FIX}"
+            f"transformers {version} is incompatible with ChatTTS (missing LlamaModel); run: {_TRANSFORMERS_FIX}"
         )
 
     try:
         from transformers import LlamaConfig, LlamaModel  # noqa: F401
     except ImportError as exc:
         raise ImportError(
-            f"当前 transformers {version} 无法导入 LlamaModel，请执行: {_TRANSFORMERS_FIX}"
+            f"transformers {version} cannot import LlamaModel; run: {_TRANSFORMERS_FIX}"
         ) from exc
 
 
@@ -80,9 +80,9 @@ def _load_chatt_sync(settings: Settings) -> tuple[Any, str]:
     apply_hf_mirror(settings)
 
     custom_path = (settings.chatt_home or "").strip() or None
-    print("\n⏳ 正在加载 ChatTTS 模型（首次运行会从 HuggingFace 下载权重）...")
+    logger.info("Loading ChatTTS model (first run downloads from HuggingFace)...")
     if settings.hf_endpoint:
-        print(f"   使用 HF 镜像: {settings.hf_endpoint}")
+        logger.info("Using HF mirror: %s", settings.hf_endpoint)
 
     chat = ChatTTS.Chat()
     if hasattr(chat, "load"):
@@ -92,12 +92,11 @@ def _load_chatt_sync(settings: Settings) -> tuple[Any, str]:
 
     if loaded is False:
         raise RuntimeError(
-            "ChatTTS 模型加载失败。请设置 CALLIO_HF_ENDPOINT=https://hf-mirror.com 后重试，"
-            "或指定 CALLIO_CHATTTS_HOME 指向已下载的模型目录。"
+            "ChatTTS model failed to load. Set CALLIO_HF_ENDPOINT=https://hf-mirror.com and retry, or set CALLIO_CHATTTS_HOME to a local model directory."
         )
 
     speaker = chat.sample_random_speaker()
-    print("✅ ChatTTS 模型已就绪")
+    logger.info("ChatTTS model ready")
     return chat, speaker
 
 
@@ -122,7 +121,7 @@ async def preload_tts(settings: Settings) -> None:
             _preload_error = str(exc)
             logger.exception("ChatTTS preload failed")
             _print_tts_diagnostics(exc)
-            print(f"\n❌ ChatTTS 预加载失败，将回退到 macOS say: {exc}")
+            logger.warning("ChatTTS preload failed, falling back to macOS say: %s", exc)
         finally:
             _ready.set()
 

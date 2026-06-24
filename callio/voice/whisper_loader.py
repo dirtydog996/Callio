@@ -39,13 +39,13 @@ def _model_cache_key(settings: Settings) -> str:
 def _load_model_sync(settings: Settings) -> Any:
     from faster_whisper import WhisperModel
 
-    print(f"\n⏳ 正在加载 Whisper 模型 ({settings.whisper_model})...")
+    logger.info("Loading Whisper model: %s", settings.whisper_model)
     model = WhisperModel(
         settings.whisper_model,
         device=settings.whisper_device,
         compute_type=settings.whisper_compute_type,
     )
-    print(f"✅ Whisper 模型已就绪: {settings.whisper_model}")
+    logger.info("Whisper model ready: %s", settings.whisper_model)
     return model
 
 
@@ -77,7 +77,7 @@ async def preload_whisper(settings: Settings) -> None:
         except Exception as exc:
             _preload_error = str(exc)
             logger.exception("Whisper preload failed")
-            print(f"\n❌ Whisper 模型预加载失败: {exc}")
+            logger.warning("Whisper preload failed: %s", exc)
         finally:
             _ready.set()
 

@@ -36,9 +36,9 @@ def build_session_notification_payload(
     title = session_title.strip() or session_id[:8]
     compact_summary = _truncate(summary, max_chars=320)
     if not compact_summary:
-        compact_summary = _truncate(transcript.replace("\n", " "), max_chars=320) or "会话已结束。"
+        compact_summary = _truncate(transcript.replace("\n", " "), max_chars=320) or "Session ended."
     return {
-        "text": f"📞 Callio 会话结束：{title}\n会话ID: {session_id}\n摘要: {compact_summary}",
+        "text": f"📞 Callio session ended: {title}\nSession ID: {session_id}\nSummary: {compact_summary}",
     }
 
 

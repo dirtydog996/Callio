@@ -77,7 +77,7 @@ def create_fish_tts(settings: Settings, *, sample_rate: int) -> TTSService:
                 logger.info("Streamed assistant audio via Fish Speech (%d bytes PCM)", len(pcm))
             except requests.exceptions.ConnectionError:
                 logger.error(
-                    "无法连接 Fish Speech 服务器 %s，请先启动服务器", self._base_url
+                    "Cannot connect to Fish Speech server %s — please start the server first", self._base_url
                 )
             except Exception as exc:
                 logger.warning("Fish Speech TTS failed: %s", exc)

@@ -70,18 +70,18 @@ class TaskCoordinator:
             running += 1
 
         if not confirmed:
-            return {"confirmed": [], "message": "没有可确认的任务，或已达并行上限。"}
+            return {"confirmed": [], "message": "No tasks to confirm, or parallel limit reached."}
         return {
             "confirmed": confirmed,
-            "message": f"已确认并派发 {len(confirmed)} 项后台任务，通话可继续。",
-            "speak_hint": "好的，已在后台开始执行。" if confirmed else "没有任务被确认。",
+            "message": f"Confirmed and dispatched {len(confirmed)} background task(s) — conversation can continue.",
+            "speak_hint": "Got it, running in the background." if confirmed else "No tasks were confirmed.",
         }
 
     async def dispatch_background_summary(self, session_id: str, transcript: str) -> None:
         node_id = str(uuid.uuid4())
         self.database.upsert_spec_node(
             node_id,
-            "会话摘要",
+            "Session Summary",
             transcript,
             session_id=session_id,
             kind=TaskKind.SUMMARIZE.value,
@@ -91,7 +91,7 @@ class TaskCoordinator:
         await self.task_dispatcher.dispatch({
             "node_id": node_id,
             "session_id": session_id,
-            "feature_name": "会话摘要",
+            "feature_name": "Session Summary",
             "description": transcript,
             "kind": TaskKind.SUMMARIZE.value,
         })

@@ -25,7 +25,7 @@ def build_dispatch_payload(
     difficulty_level: int = 1,
 ) -> dict[str, Any]:
     clean_description = description.strip()
-    clean_title = title.strip() or (clean_description[:24] + ("…" if len(clean_description) > 24 else "")) or "手动任务"
+    clean_title = title.strip() or (clean_description[:24] + ("…" if len(clean_description) > 24 else "")) or "manual-task"
     return {
         "session_id": session_id,
         "feature_name": clean_title,
@@ -48,7 +48,7 @@ def request_json(base_url: str, path: str, *, method: str = "GET", payload: dict
         body = exc.read().decode("utf-8", errors="ignore")
         raise SystemExit(f"HTTP {exc.code}: {body or exc.reason}") from exc
     except urllib.error.URLError as exc:  # pragma: no cover - network failure path
-        raise SystemExit(f"连接失败: {exc.reason}") from exc
+        raise SystemExit(f"Connection failed: {exc.reason}") from exc
 
 
 def create_parser() -> argparse.ArgumentParser:

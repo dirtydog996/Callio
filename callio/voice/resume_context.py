@@ -8,24 +8,24 @@ def build_resume_block(database: Database, session_id: str, *, max_lines: int = 
     if not session:
         return ""
 
-    parts: list[str] = ["【续聊会话】"]
+    parts: list[str] = ["[Resumed Session]"]
     title = str(session.get("title", "")).strip()
     if title:
-        parts.append(f"标题：{title}")
+        parts.append(f"Title: {title}")
 
     summary = str(session.get("summary", "")).strip()
     if summary:
-        parts.append(f"上次摘要：{summary}")
+        parts.append(f"Previous summary: {summary}")
 
     plan = str(session.get("action_plan", "")).strip()
     if plan:
-        parts.append(f"行动计划：\n{plan[:600]}")
+        parts.append(f"Action plan:\n{plan[:600]}")
 
     transcript = str(session.get("transcript", "")).strip()
     if transcript:
         lines = transcript.splitlines()
         excerpt = "\n".join(lines[-max_lines:])
-        parts.append(f"最近对话：\n{excerpt}")
+        parts.append(f"Recent conversation:\n{excerpt}")
 
     if len(parts) == 1:
         return ""

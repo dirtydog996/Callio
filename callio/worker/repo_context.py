@@ -29,10 +29,10 @@ def collect_repo_context(description: str, settings: Settings | None = None) -> 
     snippets.extend(_scan_files(root, keywords))
 
     if not snippets:
-        return f"工作区: {root}\n（未匹配到相关代码片段）"
+        return f"Workspace: {root}\n(no matching code snippets found)"
 
     body = "\n\n---\n\n".join(snippets[:8])
-    return f"工作区: {root}\n\n{body[:_MAX_SNIPPET]}"
+    return f"Workspace: {root}\n\n{body[:_MAX_SNIPPET]}"
 
 
 def _keywords_from_description(description: str) -> list[str]:
@@ -41,7 +41,7 @@ def _keywords_from_description(description: str) -> list[str]:
     out: list[str] = []
     for token in tokens:
         low = token.lower()
-        if low in seen or low in {"the", "and", "请", "帮", "我", "分析", "实现", "模块"}:
+        if low in seen or low in {"the", "and"}:
             continue
         seen.add(low)
         out.append(token)

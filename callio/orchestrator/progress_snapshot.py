@@ -60,20 +60,20 @@ class ProgressSnapshot:
         snap = self.snapshot(session_id)
         parts: list[str] = []
         if snap.get("summary"):
-            parts.append(f"摘要: {snap['summary']}")
+            parts.append(f"Summary: {snap['summary']}")
         if snap.get("action_plan"):
-            parts.append(f"计划: {snap['action_plan']}")
+            parts.append(f"Plan: {snap['action_plan']}")
         if snap.get("proposed"):
-            titles = ", ".join(f"{t['title']}(待确认)" for t in snap["proposed"][:3])
-            parts.append(f"待确认: {titles}")
+            titles = ", ".join(f"{t['title']}(pending)" for t in snap["proposed"][:3])
+            parts.append(f"Pending: {titles}")
         if snap.get("active"):
             titles = ", ".join(f"{t['title']}({t['status']})" for t in snap["active"][:3])
-            parts.append(f"进行中: {titles}")
+            parts.append(f"Active: {titles}")
         if snap.get("done"):
             titles = ", ".join(f"{t['title']}({t['status']})" for t in snap["done"][:3])
-            parts.append(f"已完成: {titles}")
+            parts.append(f"Done: {titles}")
         if snap.get("last_log"):
-            parts.append(f"最近日志: {snap['last_log'][:120]}")
+            parts.append(f"Recent log: {snap['last_log'][:120]}")
         if not parts:
             return ""
-        return "【后台任务状态】" + " | ".join(parts)
+        return "[Background Task Status] " + " | ".join(parts)
