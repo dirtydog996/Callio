@@ -102,6 +102,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             from pipecat.services.ollama.llm import OLLamaLLMService, OllamaLLMSettings
             from pipecat.transcriptions.language import Language
             from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
+            from callio.llm.voice_factory import build_voice_llm_service
         except Exception:
             await websocket.accept()
             await websocket.send_json({
@@ -227,10 +228,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
 
         stt = _create_stt(settings)
 
-        llm = OLLamaLLMService(
-            base_url=settings.ollama_base_url,
-            settings=OllamaLLMSettings(model=settings.llm_model),
-        )
+        llm = build_voice_llm_service(settings)
 
         tts = create_tts(settings)
 
