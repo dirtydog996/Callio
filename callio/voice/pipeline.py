@@ -16,6 +16,7 @@ from callio.voice.resume_context import build_resume_block
 from callio.voice.tools.handlers import create_tool_handlers
 from callio.voice.tools.schemas import all_tool_definitions
 from callio.voice.session_hook import SessionHook
+from callio.voice.notifier import notify_session_finished
 from callio.voice.tts_loader import preload_tts, wait_for_tts
 from callio.voice.web_tts import create_tts
 from callio.voice.whisper_loader import create_whisper_stt, preload_whisper, wait_for_whisper
@@ -317,3 +318,11 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 transcript = await orchestrator.transcripts.flush(session_id)
                 await orchestrator.coordinator.finalize_summary(session_id, transcript)
                 await orchestrator.sessions.finalize(connection_id, transcript=transcript)
+                session_row = orchestrator.database.get_session(session_id) or {}
+                notify_session_finished(
+                    settings,
+                    session_id=session_id,
+                    session_title=str(session_row.get("title", session_ctx.title if session_ctx else "")),
+                    transcript=transcript,
+                    summary=str(session_row.get("summary", "")),
+                )

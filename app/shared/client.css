@@ -91,7 +91,8 @@ a {
 
 .session-list,
 .task-list,
-.quick-actions {
+.quick-actions,
+.report-list {
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -341,6 +342,21 @@ button:disabled {
     padding-left: 18px;
     color: var(--muted);
     line-height: 1.6;
+}
+
+.report-item {
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    background: var(--panel-soft);
+    border-radius: 14px;
+    padding: 10px 12px;
+}
+
+.report-item.user {
+    border-color: rgba(96, 165, 250, 0.3);
+}
+
+.report-item.assistant {
+    border-color: rgba(52, 211, 153, 0.3);
 }
 
 .mobile-only {

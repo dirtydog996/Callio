@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="96" viewBox="0 0 320 96" role="img" aria-label="Callio logo">
+  <rect x="2" y="2" width="316" height="92" rx="16" fill="#0f172a" stroke="#334155" stroke-width="3"/>
+  <text x="26" y="61" font-family="Menlo, Consolas, monospace" font-size="42" fill="#60a5fa">&gt; ☎</text>
+  <text x="126" y="61" font-family="Inter, Arial, sans-serif" font-size="34" fill="#e2e8f0">Callio</text>
+</svg>

@@ -70,6 +70,12 @@ class Settings:
     cosyvoice_base_url: str = os.getenv("CALLIO_COSYVOICE_URL", "http://localhost:9880")
     # Fish Speech REST API base URL (used when tts_backend=fish)
     fish_speech_url: str = os.getenv("CALLIO_FISH_SPEECH_URL", "http://localhost:8080")
+    # Generic notification webhooks (triggered when a voice session ends)
+    notify_wechat_webhook: str = os.getenv("CALLIO_NOTIFY_WECHAT_WEBHOOK", "")
+    notify_feishu_webhook: str = os.getenv("CALLIO_NOTIFY_FEISHU_WEBHOOK", "")
+    notify_discord_webhook: str = os.getenv("CALLIO_NOTIFY_DISCORD_WEBHOOK", "")
+    notify_telegram_webhook: str = os.getenv("CALLIO_NOTIFY_TELEGRAM_WEBHOOK", "")
+    notify_timeout_sec: int = int(os.getenv("CALLIO_NOTIFY_TIMEOUT_SEC", "8"))
 
 
 @lru_cache(maxsize=1)

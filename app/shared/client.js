@@ -20,6 +20,7 @@
         statusHint: document.getElementById("statusHint"),
         messages: document.getElementById("messages"),
         tasks: document.getElementById("tasks"),
+        liveReport: document.getElementById("liveReport"),
         sessions: document.getElementById("sessionList"),
         startBtn: document.getElementById("startBtn"),
         stopBtn: document.getElementById("stopBtn"),
@@ -47,10 +48,27 @@
         div.append(meta, body);
         elements.messages.appendChild(div);
         elements.messages.scrollTop = elements.messages.scrollHeight;
+        addLiveReport(role, text, label);
     }
 
     function resetMessages() {
         elements.messages.innerHTML = "";
+    }
+
+    function resetLiveReport() {
+        if (!elements.liveReport) return;
+        elements.liveReport.innerHTML = "<p class='empty-state'>开始对话后，这里会实时记录用户与助手的文本内容。</p>";
+    }
+
+    function addLiveReport(role, text, label) {
+        if (!elements.liveReport || !text) return;
+        const empty = elements.liveReport.querySelector(".empty-state");
+        if (empty) empty.remove();
+        const item = document.createElement("div");
+        item.className = `report-item ${role}`;
+        const time = new Date().toLocaleTimeString();
+        item.textContent = `[${time}] ${label || (role === "user" ? "你" : "Callio")}: ${text}`;
+        elements.liveReport.prepend(item);
     }
 
     function formatSessionLabel(session) {
@@ -130,6 +148,7 @@
         const data = await requestJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}`);
         if (!data.found || !data.session) return;
         resetMessages();
+        resetLiveReport();
         renderStoredTranscript(data.session.transcript || "");
         if (data.session.summary) {
             addMessage("assistant", `续聊摘要：${data.session.summary}`, "摘要");
@@ -512,6 +531,7 @@
         elements.startBtn.disabled = false;
         elements.stopBtn.disabled = true;
         state.sessionId = null;
+        resetLiveReport();
         loadSessionOptions();
     }
 
@@ -576,6 +596,7 @@
     bindQuickActions();
     loadSessionOptions();
     refreshSessionTasks();
+    resetLiveReport();
 
     if (mode === "mobile") {
         setStatus("warning", "移动端就绪", "推荐使用 HTTPS 访问以启用麦克风。");

@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+import unittest
+from unittest.mock import patch
+
+from callio.config.settings import Settings
+from callio.voice.notifier import build_session_notification_payload, notify_session_finished
+
+
+class NotifierTests(unittest.TestCase):
+    def test_payload_uses_summary_when_available(self) -> None:
+        payload = build_session_notification_payload(
+            session_id="sess-12345678",
+            session_title="Demo",
+            transcript="user: hi",
+            summary="finished summary",
+        )
+        self.assertIn("finished summary", payload["text"])
+
+    def test_payload_falls_back_to_transcript(self) -> None:
+        payload = build_session_notification_payload(
+            session_id="sess-12345678",
+            session_title="",
+            transcript="user: hi\nassistant: hello",
+            summary="",
+        )
+        self.assertIn("user: hi assistant: hello", payload["text"])
+
+    @patch("callio.voice.notifier.requests.post")
+    def test_skip_when_no_webhook(self, post_mock) -> None:
+        settings = Settings(
+            notify_wechat_webhook="",
+            notify_feishu_webhook="",
+            notify_discord_webhook="",
+            notify_telegram_webhook="",
+        )
+        notify_session_finished(
+            settings,
+            session_id="sess1",
+            session_title="demo",
+            transcript="user: hi",
+            summary="done",
+        )
+        post_mock.assert_not_called()
+
+    @patch("callio.voice.notifier.requests.post")
+    def test_send_to_configured_webhooks(self, post_mock) -> None:
+        settings = Settings(
+            notify_wechat_webhook="https://example.com/wechat",
+            notify_discord_webhook="https://example.com/discord",
+            notify_timeout_sec=6,
+        )
+        notify_session_finished(
+            settings,
+            session_id="sess1",
+            session_title="demo",
+            transcript="user: hi",
+            summary="done",
+        )
+        self.assertEqual(post_mock.call_count, 2)
+        called_urls = [args[0] for args, _ in post_mock.call_args_list]
+        self.assertIn("https://example.com/wechat", called_urls)
+        self.assertIn("https://example.com/discord", called_urls)
+
+
+if __name__ == "__main__":
+    unittest.main()
