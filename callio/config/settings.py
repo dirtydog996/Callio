@@ -49,6 +49,16 @@ class Settings:
     task_timeout_sec: int = int(os.getenv("CALLIO_TASK_TIMEOUT_SEC", "3600"))
     global_max_parallel: int = int(os.getenv("CALLIO_GLOBAL_MAX_PARALLEL", "5"))
     execute_max_retries: int = int(os.getenv("CALLIO_EXECUTE_MAX_RETRIES", "3"))
+    # STT backend: whisper (default) | sensevoice
+    stt_backend: str = os.getenv("CALLIO_STT_BACKEND", "whisper")
+    # FunASR / SenseVoice model name (used when stt_backend=sensevoice)
+    funasr_model: str = os.getenv("CALLIO_FUNASR_MODEL", "iic/SenseVoiceSmall")
+    # EdgeTTS voice name (used when tts_backend=edge)
+    edge_tts_voice: str = os.getenv("CALLIO_EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
+    # CosyVoice REST API base URL (used when tts_backend=cosyvoice)
+    cosyvoice_base_url: str = os.getenv("CALLIO_COSYVOICE_URL", "http://localhost:9880")
+    # Fish Speech REST API base URL (used when tts_backend=fish)
+    fish_speech_url: str = os.getenv("CALLIO_FISH_SPEECH_URL", "http://localhost:8080")
 
 
 @lru_cache(maxsize=1)

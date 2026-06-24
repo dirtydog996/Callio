@@ -36,16 +36,21 @@ export CALLIO_HF_ENDPOINT=https://hf-mirror.com
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CALLIO_HF_ENDPOINT` | _(empty)_ | HuggingFace mirror, e.g. `https://hf-mirror.com` |
+| `CALLIO_STT_BACKEND` | `whisper` | STT backend: `whisper` or `sensevoice` |
 | `CALLIO_WHISPER_MODEL` | `base` | Whisper model size (`base`, `small`, `medium`, …) |
 | `CALLIO_WHISPER_PRELOAD` | `1` | Preload Whisper at startup |
-| `CALLIO_TTS_BACKEND` | `chatt` | TTS backend: `chatt` (ChatTTS on Mac) or `say` (macOS fallback) |
+| `CALLIO_FUNASR_MODEL` | `iic/SenseVoiceSmall` | FunASR model name (used when `stt_backend=sensevoice`) |
+| `CALLIO_TTS_BACKEND` | `chatt` | TTS backend: `chatt`, `say`, `edge`, `cosyvoice`, `fish` |
 | `CALLIO_TTS_PRELOAD` | `1` | Preload ChatTTS at startup |
 | `CALLIO_CHATTTS_HOME` | _(empty)_ | Optional HuggingFace cache dir for ChatTTS weights |
+| `CALLIO_EDGE_TTS_VOICE` | `zh-CN-XiaoxiaoNeural` | Voice name for EdgeTTS backend |
+| `CALLIO_COSYVOICE_URL` | `http://localhost:9880` | CosyVoice REST API base URL |
+| `CALLIO_FISH_SPEECH_URL` | `http://localhost:8080` | Fish Speech REST API base URL |
 | `CALLIO_AUDIO_OUT_SAMPLE_RATE` | `16000` | Downlink PCM sample rate to the browser |
 | `CALLIO_MAX_PARALLEL_TASKS` | `3` | Max parallel RUNNING tasks per voice session |
 | `CALLIO_SUMMARIZE_DEBOUNCE_SEC` | `30` | Auto-summary debounce interval during calls |
 | `CALLIO_PROGRESS_INJECT` | `1` | Inject task progress block into voice system prompt |
-| `CALLIO_AGENT_BACKEND` | _(empty)_ | Force agent: `hermes`, `openclaw`, `claude` |
+| `CALLIO_AGENT_BACKEND` | _(empty)_ | Force agent: `hermes`, `openclaw`, `goose`, `aider`, `claude` |
 | `CALLIO_AGENT_COMMAND` | _(empty)_ | Custom command with `{task}` placeholder |
 | `CALLIO_TASK_TIMEOUT_SEC` | `3600` | Max seconds per background task |
 | `CALLIO_GLOBAL_MAX_PARALLEL` | `5` | Max RUNNING tasks across all sessions |
@@ -63,19 +68,96 @@ export CALLIO_HF_ENDPOINT=https://hf-mirror.com
 |-------|----------------|
 | Whisper | `~/.cache/huggingface/hub/` |
 | ChatTTS | `~/.cache/huggingface/hub/models--2Noise--ChatTTS/` |
+| SenseVoice / FunASR | `~/.cache/modelscope/` |
 
 下载完成后，重启服务只需从缓存加载，无需重新联网。
 
+### STT backends
+
+| Backend | 说明 | 安装 |
+|---------|------|------|
+| **faster-whisper**（默认） | 通用多语言，CPU 可运行 | 已含在 `requirements.txt` |
+| **SenseVoice** | 中文识别准确率更高，含情绪感知 | `pip install funasr modelscope` |
+
+```bash
+# 启用 SenseVoice
+export CALLIO_STT_BACKEND=sensevoice
+export CALLIO_FUNASR_MODEL=iic/SenseVoiceSmall   # 首次运行自动下载 ~300 MB
+```
+
 ### TTS backends
 
-TTS **运行在 Mac 服务端**，手机只采集麦克风并播放下行 PCM。
+TTS **运行在服务端**，浏览器/手机只播放下行 PCM。
 
-| Backend | When to use |
-|---------|-------------|
-| **ChatTTS**（默认） | 对话场景，中文自然度优于系统 `say` |
-| **macOS say** | `CALLIO_TTS_BACKEND=say`，或 ChatTTS 加载失败时自动回退 |
+| Backend | 说明 | 安装 / 启动 |
+|---------|------|------------|
+| **ChatTTS**（默认） | 对话场景，中文自然度优于 `say` | 已含在 `requirements.txt` |
+| **macOS say** | 系统 TTS，零依赖回退 | 内置，macOS 专属 |
+| **EdgeTTS** | 微软 Edge TTS 云服务，跨平台，速度快 | `pip install edge-tts` + 需 `ffmpeg` |
+| **CosyVoice** | 高品质本地 TTS，通过 REST API 对接 | 需单独启动 CosyVoice 服务器 |
+| **Fish Speech** | 高品质本地 TTS，通过 REST API 对接 | 需单独启动 Fish Speech 服务器 |
 
-曾评估 CosyVoice / Fish Speech：音质好，但 Mac 上推理慢或集成成本高，不适合实时全双工通话。
+#### EdgeTTS 快速接入
+
+```bash
+pip install edge-tts
+# macOS: brew install ffmpeg  |  Ubuntu: apt install ffmpeg
+export CALLIO_TTS_BACKEND=edge
+export CALLIO_EDGE_TTS_VOICE=zh-CN-XiaoxiaoNeural  # 可选其他微软中文音色
+```
+
+可用中文音色示例：`zh-CN-XiaoxiaoNeural`（女声）、`zh-CN-YunxiNeural`（男声）、`zh-TW-HsiaoChenNeural`（台湾）
+
+#### CosyVoice 快速接入
+
+```bash
+# 1. 启动 CosyVoice 服务器（独立环境）
+git clone https://github.com/FunAudioLLM/CosyVoice
+cd CosyVoice && pip install -r requirements.txt
+python runtime/python/fastapi/server.py --port 9880
+
+# 2. 配置 Callio 使用 CosyVoice
+export CALLIO_TTS_BACKEND=cosyvoice
+export CALLIO_COSYVOICE_URL=http://localhost:9880
+```
+
+#### Fish Speech 快速接入
+
+```bash
+# 1. 启动 Fish Speech 服务器（独立环境）
+pip install fish-speech
+python -m tools.api_server --listen 0.0.0.0:8080 \
+  --llama-checkpoint-path checkpoints/fish-speech-1.5
+
+# 2. 配置 Callio 使用 Fish Speech
+export CALLIO_TTS_BACKEND=fish
+export CALLIO_FISH_SPEECH_URL=http://localhost:8080
+```
+
+### Agent backends（编码 / 日常任务执行）
+
+Callio 支持多种开源 AI Agent CLI 工具执行后台任务。启动时自动探测，也可通过环境变量强制指定。
+
+| Agent | 说明 | 安装 |
+|-------|------|------|
+| **hermes** | 通用任务执行框架 | 参见 Hermes 官方文档 |
+| **openclaw** | 本地化代码 Agent | 参见 OpenClaw 官方文档 |
+| **goose** | Block 开源 AI Agent，支持代码与日常任务 | `pip install goose-ai` 或参见官方文档 |
+| **aider** | 流行的 AI 结对编程工具 | `pip install aider-chat` |
+| **claude** | Anthropic Claude CLI（`claude code`） | `npm install -g @anthropic-ai/claude-code` |
+
+```bash
+# 自动探测（推荐），按 hermes → openclaw → goose → aider → claude 顺序查找
+# 无需设置，安装任意一个即可
+
+# 强制指定
+export CALLIO_AGENT_BACKEND=aider
+
+# 完全自定义命令（{task} 会被替换为任务描述）
+export CALLIO_AGENT_COMMAND="aider --yes-always --message {task}"
+```
+
+**日常任务 vs 代码任务**：Agent Resolver 内部区分 `daily`（日常操作）和代码任务，选择合适的 CLI 参数组合。目前所有后端均使用相同的 `--task` 参数；如需为特定后端定制，可通过 `CALLIO_AGENT_COMMAND` 完全控制。
 
 ## Mobile testing (iPhone / Android)
 
