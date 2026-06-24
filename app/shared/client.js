@@ -32,6 +32,159 @@
         resumeLabel: document.getElementById("resumeLabel"),
     };
 
+    // ---- Toast notification system ----
+    const _toastContainer = (() => {
+        const el = document.createElement("div");
+        el.className = "toast-container";
+        document.body.appendChild(el);
+        return el;
+    })();
+
+    function showToast(message, kind, duration) {
+        const toast = document.createElement("div");
+        toast.className = `toast ${kind || ""}`.trim();
+        toast.textContent = message;
+        _toastContainer.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = "0";
+            toast.style.transform = "translateX(120%)";
+            setTimeout(() => toast.remove(), 320);
+        }, duration == null ? 3500 : duration);
+    }
+
+    // ---- Session report modal ----
+    const _STATUS_INFO = {
+        COMPLETED: { icon: "✓", label: "已完成", cls: "completed" },
+        SUCCESS:   { icon: "✓", label: "已完成", cls: "completed" },
+        PENDING:   { icon: "◎", label: "待确认", cls: "pending" },
+        CONFIRMED: { icon: "◉", label: "待执行", cls: "pending" },
+        RUNNING:   { icon: "⟳", label: "执行中", cls: "running" },
+        FAILED:    { icon: "✗", label: "已失败", cls: "failed" },
+        CANCELLED: { icon: "⊘", label: "已取消", cls: "failed" },
+    };
+
+    function _statusInfo(status) {
+        return _STATUS_INFO[(status || "").toUpperCase()] || { icon: "·", label: status || "未知", cls: "" };
+    }
+
+    async function showSessionReport(sessionId) {
+        let sessionData, tasksData;
+        try {
+            [sessionData, tasksData] = await Promise.all([
+                requestJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}`),
+                requestJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/tasks`),
+            ]);
+        } catch (e) {
+            return;
+        }
+        if (!sessionData || !sessionData.found) return;
+        const session = sessionData.session;
+        const tasks = (tasksData && tasksData.tasks) ? tasksData.tasks : [];
+        if (!session.summary && !tasks.length) return;
+
+        const overlay = document.createElement("div");
+        overlay.className = "modal-overlay";
+
+        const modal = document.createElement("div");
+        modal.className = "modal";
+        modal.setAttribute("role", "dialog");
+        modal.setAttribute("aria-modal", "true");
+
+        // Header
+        const header = document.createElement("div");
+        header.className = "modal-header";
+        const titleEl = document.createElement("h2");
+        titleEl.className = "modal-title";
+        titleEl.textContent = `📋 ${session.title || "通话结束报告"}`;
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "ghost-btn";
+        closeBtn.style.padding = "8px 16px";
+        closeBtn.textContent = "关闭";
+        closeBtn.onclick = () => overlay.remove();
+        header.append(titleEl, closeBtn);
+        modal.appendChild(header);
+
+        // Meta
+        const metaEl = document.createElement("div");
+        metaEl.className = "modal-meta";
+        try {
+            const ts = session.ended_at || session.created_at;
+            metaEl.textContent = ts
+                ? `通话时间：${new Date(ts).toLocaleString("zh-CN")}`
+                : "通话已结束";
+        } catch (_) {
+            metaEl.textContent = "通话已结束";
+        }
+        modal.appendChild(metaEl);
+
+        // Summary
+        if (session.summary) {
+            const sumLabel = document.createElement("div");
+            sumLabel.className = "modal-section-label";
+            sumLabel.textContent = "会话摘要";
+            const sumText = document.createElement("div");
+            sumText.className = "modal-summary-text";
+            sumText.textContent = session.summary;
+            modal.append(sumLabel, sumText);
+        }
+
+        // Tasks / todos
+        if (tasks.length) {
+            const todoLabel = document.createElement("div");
+            todoLabel.className = "modal-section-label";
+            todoLabel.textContent = `待办任务（${tasks.length}）`;
+            modal.appendChild(todoLabel);
+            tasks.forEach((task) => {
+                const si = _statusInfo(task.status);
+                const item = document.createElement("div");
+                item.className = "todo-item";
+
+                const iconEl = document.createElement("div");
+                iconEl.className = `todo-icon ${si.cls}`;
+                iconEl.textContent = si.icon;
+
+                const content = document.createElement("div");
+                content.className = "todo-content";
+                const name = document.createElement("div");
+                name.className = "todo-name";
+                name.textContent = task.feature_name || task.node_id;
+                content.appendChild(name);
+                if (task.description) {
+                    const desc = document.createElement("div");
+                    desc.className = "todo-desc";
+                    desc.textContent = task.description;
+                    content.appendChild(desc);
+                }
+
+                const badge = document.createElement("div");
+                badge.className = `todo-badge ${si.cls}`;
+                badge.textContent = si.label;
+
+                item.append(iconEl, content, badge);
+                modal.appendChild(item);
+            });
+        }
+
+        // Footer
+        const footer = document.createElement("div");
+        footer.className = "modal-footer";
+        const doneBtn = document.createElement("button");
+        doneBtn.type = "button";
+        doneBtn.className = "primary-btn";
+        doneBtn.textContent = "完成";
+        doneBtn.onclick = () => overlay.remove();
+        footer.appendChild(doneBtn);
+        modal.appendChild(footer);
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) overlay.remove();
+        });
+        closeBtn.focus();
+    }
+
     function setStatus(kind, text, hint) {
         elements.statusPill.className = `pill ${kind || ""}`.trim();
         elements.statusPill.textContent = text;
@@ -42,7 +195,8 @@
         const div = document.createElement("div");
         div.className = `message ${role}`;
         const meta = document.createElement("small");
-        meta.textContent = label || (role === "user" ? "你" : "Callio");
+        const _msgTime = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+        meta.textContent = `${label || (role === "user" ? "你" : "Callio")} · ${_msgTime}`;
         const body = document.createElement("div");
         body.textContent = text;
         div.append(meta, body);
@@ -458,14 +612,14 @@
             console.error("WebSocket error", error);
             if (connected) {
                 setStatus("danger", "连接错误", "语音通道已断开。");
-                stopSession();
+                stopSession(true);
             }
         };
 
         state.ws.onclose = () => {
             if (state.isRecording) {
                 setStatus("danger", "已断开", "语音会话已关闭。");
-                stopSession();
+                stopSession(true);
             }
         };
 
@@ -509,17 +663,20 @@
             await resumeAudioContext();
             stopDownlinkPlayback();
             state.isRecording = true;
+            document.body.setAttribute("data-recording", "true");
             elements.stopBtn.disabled = false;
             setStatus("success", "已连接", "全双工语音已启动。");
         } catch (error) {
             console.error(error);
-            alert(`启动失败：${microphoneErrorMessage(error)}`);
+            showToast(`启动失败：${microphoneErrorMessage(error)}`, "danger", 6000);
             setStatus("danger", "启动失败", microphoneErrorMessage(error));
-            stopSession();
+            stopSession(true);
         }
     }
 
-    function stopSession() {
+    function stopSession(skipStatusUpdate) {
+        document.body.removeAttribute("data-recording");
+        const endedSessionId = state.sessionId;
         state.isRecording = false;
         disconnectStatusSocket();
         stopDownlinkPlayback();
@@ -531,8 +688,14 @@
         elements.startBtn.disabled = false;
         elements.stopBtn.disabled = true;
         state.sessionId = null;
+        if (!skipStatusUpdate) {
+            setStatus("", "已断开", "对话已结束。");
+        }
         resetLiveReport();
         loadSessionOptions();
+        if (endedSessionId) {
+            setTimeout(() => showSessionReport(endedSessionId).catch(() => {}), 500);
+        }
     }
 
     function summarizeTitle(text) {
@@ -589,7 +752,7 @@
         try {
             await dispatchManualTask();
         } catch (error) {
-            alert(`任务派发失败：${error.message}`);
+            showToast(`任务派发失败：${error.message}`, "danger");
         }
     });
 
