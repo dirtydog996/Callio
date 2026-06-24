@@ -60,7 +60,11 @@
     }
 
     async function requestJson(path, options) {
-        const response = await fetch(path, options);
+        const url = new URL(path, window.location.origin);
+        if (url.origin !== window.location.origin || !url.pathname.startsWith("/api/v1/")) {
+            throw new Error("Unsupported request target");
+        }
+        const response = await fetch(url.toString(), options);
         if (!response.ok) {
             throw new Error(`${response.status} ${response.statusText}`);
         }
@@ -84,10 +88,12 @@
                 button.classList.add("active");
             }
             button.type = "button";
-            button.innerHTML = `
-                <strong>${session.title || session.session_id.slice(0, 8)}</strong>
-                <div class="helper-text">${formatSessionLabel(session)}</div>
-            `;
+            const title = document.createElement("strong");
+            title.textContent = session.title || session.session_id.slice(0, 8);
+            const meta = document.createElement("div");
+            meta.className = "helper-text";
+            meta.textContent = formatSessionLabel(session);
+            button.append(title, meta);
             button.onclick = async () => {
                 state.selectedSessionId = session.session_id;
                 renderSessions(items);
@@ -121,7 +127,7 @@
     }
 
     async function preloadResumeSession(sessionId) {
-        const data = await requestJson(`/api/v1/sessions/${sessionId}`);
+        const data = await requestJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}`);
         if (!data.found || !data.session) return;
         resetMessages();
         renderStoredTranscript(data.session.transcript || "");
@@ -162,12 +168,16 @@
         const status = (event.status || event.phase || event.event).toString();
         const progress = event.progress != null ? Number(event.progress) : null;
         card.className = taskCardClass(status);
-        card.innerHTML = `
-            <div>
-                <strong>${taskTitle(event)}</strong>
-                <div class="helper-text">${event.event} · ${status}${progress != null ? ` · ${progress}%` : ""}</div>
-            </div>
-        `;
+        card.innerHTML = "";
+
+        const header = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = taskTitle(event);
+        const meta = document.createElement("div");
+        meta.className = "helper-text";
+        meta.textContent = `${event.event} · ${status}${progress != null ? ` · ${progress}%` : ""}`;
+        header.append(title, meta);
+        card.appendChild(header);
 
         if (progress != null) {
             const wrap = document.createElement("div");
@@ -217,7 +227,7 @@
             state.taskNodes.clear();
             return;
         }
-        const data = await requestJson(`/api/v1/sessions/${sessionRef}/tasks`);
+        const data = await requestJson(`/api/v1/sessions/${encodeURIComponent(sessionRef)}/tasks`);
         elements.tasks.innerHTML = "";
         state.taskNodes.clear();
         const rows = [...(data.tasks || [])].reverse();
@@ -240,8 +250,8 @@
         const sessionRef = currentSessionRef();
         if (!sessionRef) return;
         const path = action === "confirm"
-            ? `/api/v1/sessions/${sessionRef}/tasks/confirm`
-            : `/api/v1/sessions/${sessionRef}/tasks/cancel`;
+            ? `/api/v1/sessions/${encodeURIComponent(sessionRef)}/tasks/confirm`
+            : `/api/v1/sessions/${encodeURIComponent(sessionRef)}/tasks/cancel`;
         const body = action === "confirm"
             ? { node_ids: nodeIds, confirm_all: Boolean(confirmAll) }
             : { node_ids: nodeIds };
@@ -255,7 +265,7 @@
     }
 
     async function cancelRunningTask(nodeId) {
-        const data = await requestJson(`/api/v1/tasks/${nodeId}/cancel`, { method: "POST" });
+        const data = await requestJson(`/api/v1/tasks/${encodeURIComponent(nodeId)}/cancel`, { method: "POST" });
         addMessage("assistant", data.message || "已请求停止任务", "操作反馈");
         await refreshSessionTasks();
     }
