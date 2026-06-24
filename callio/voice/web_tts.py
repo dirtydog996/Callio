@@ -58,6 +58,9 @@ def synthesize_say_wav(text: str, voice: str = "") -> bytes:
         return wav_path.read_bytes()
 
 
+_KNOWN_BACKENDS = {"chatt", "say", "edge", "cosyvoice", "fish"}
+
+
 def _resolve_backend(settings: Settings) -> str:
     backend = (settings.tts_backend or "chatt").strip().lower()
     if backend == "chatt":
@@ -72,7 +75,7 @@ def _resolve_backend(settings: Settings) -> str:
             if not is_chatt_ready() and get_preload_error():
                 logger.warning("ChatTTS preload failed, falling back to macOS say")
                 return "say"
-    elif backend not in {"say", "chatt"}:
+    elif backend not in _KNOWN_BACKENDS:
         logger.warning("Unknown TTS backend %r, falling back to macOS say", backend)
         return "say"
     return backend
@@ -85,6 +88,15 @@ def create_tts(settings: Settings | None = None) -> TTSService:
 
     if backend == "chatt":
         return _create_chatt_tts(settings, sample_rate=sample_rate)
+    if backend == "edge":
+        from callio.voice.edge_tts_backend import create_edge_tts
+        return create_edge_tts(settings, sample_rate=sample_rate)
+    if backend == "cosyvoice":
+        from callio.voice.cosyvoice_tts import create_cosyvoice_tts
+        return create_cosyvoice_tts(settings, sample_rate=sample_rate)
+    if backend == "fish":
+        from callio.voice.fish_tts import create_fish_tts
+        return create_fish_tts(settings, sample_rate=sample_rate)
     return _create_say_tts(sample_rate=sample_rate)
 
 

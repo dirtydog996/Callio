@@ -3,7 +3,12 @@ from __future__ import annotations
 import sys
 from typing import Sequence
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - optional at runtime
+    def load_dotenv(*args, **kwargs):
+        return False
+
 from fastapi import FastAPI
 
 load_dotenv()
@@ -11,7 +16,7 @@ load_dotenv()
 from callio.config.settings import Settings, get_settings
 from callio.core.server import create_app
 from callio.voice.pipeline import register_voice_routes
-from callio.web import WEB_CLIENT_PATH
+from callio.web import MOBILE_CLIENT_PATH, WEB_CLIENT_PATH
 
 
 def create_runtime_app(settings: Settings | None = None) -> FastAPI:
@@ -47,10 +52,13 @@ def show_local_qr(settings: Settings | None = None) -> None:
     import qrcode
 
     runtime_settings = settings or get_settings()
-    local_url = f"{_client_base_url(runtime_settings)}{WEB_CLIENT_PATH}"
+    base_url = _client_base_url(runtime_settings)
+    web_url = f"{base_url}{WEB_CLIENT_PATH}"
+    mobile_url = f"{base_url}{MOBILE_CLIENT_PATH}"
     print("\n=======================================================")
     print("🏠 Callio 服务已启动！")
-    print(f"🔗 局域网 Web 调试端链接: {local_url}")
+    print(f"🖥️  Web 端: {web_url}")
+    print(f"📱 手机端: {mobile_url}")
     if runtime_settings.ssl_certfile and runtime_settings.ssl_keyfile:
         print("🔒 已启用 HTTPS，手机端可使用麦克风")
     else:
@@ -59,7 +67,7 @@ def show_local_qr(settings: Settings | None = None) -> None:
     print("=======================================================")
 
     qr = qrcode.QRCode(version=1, border=1, box_size=1)
-    qr.add_data(local_url)
+    qr.add_data(mobile_url)
     qr.make(fit=True)
 
     if sys.stdout.isatty():

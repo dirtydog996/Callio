@@ -16,22 +16,33 @@
 | 通话中提议 / 确认 / 并行派发任务 | ✅ |
 | 三类任务 SUMMARIZE / ANALYZE / EXECUTE | ✅ |
 | 转写缓冲 + 挂断摘要 + `session_events` / `task_runs` | ✅ |
-| `/ws/status` + 简易任务面板 | ✅ |
+| `app/` 多端交互目录（web / mobile / cli） | ✅ |
+| `/ws/status` + Copilot 风格任务面板 | ✅ |
 | `GET /api/v1/sessions/{id}/tasks` | ✅ |
+| `tests/` 单元测试基线 | ✅ |
+| Agent 解析器（hermes / openclaw / goose / aider / claude + `{task}` 占位符） | ✅ |
+| Barge-in（用户插话 → TTS 立即中断） | ✅ |
+| 动态进度注入（每轮转写后刷新 system prompt） | ✅ |
+| 手机/桌面端任务确认/取消按钮 | ✅ |
+| SQLite 任务队列 + 重启恢复（`python -m callio.worker`） | ✅ |
+| 任务取消（PENDING/RUNNING 均支持） | ✅ |
+| 任务超时 + EXECUTE 3次重试 | ✅ |
+| `GET /api/v1/tasks/{id}/runs` 完整日志查询 | ✅ |
+| ANALYZE 仓库感知（ripgrep + 文件扫描） | ✅ |
+| 会话续接（`resume_session_id`，历史对话 + 行动计划注入） | ✅ |
+| 语义记忆（ChromaDB，跨通话注入） | ✅ |
+| `tests/test_agent_resolver.py`（13 用例） | ✅ |
+| `tests/test_task_queue.py`（14 用例） | ✅ |
+| `tests/test_context_updater.py`（9 用例） | ✅ |
 
-### 主要缺口
+### 主要缺口（截至 2026-06）
 
 | 缺口 | 影响 |
 |------|------|
-| Agent 仅自动识别 Hermes/Claude，OpenClaw 未接入 | 无法用你的主力 coding agent |
-| `CALLIO_AGENT_COMMAND` 不传任务描述 | 自定义 agent 不可用 |
-| `on_user_speech_start` 未挂到 transport | 打断体验不完整 |
-| LLM 进度上下文仅连接时注入一次 | 通话中进度回灌不稳定 |
-| ANALYZE 走 Ollama 而非仓库内只读工具 | 分析质量有限 |
-| Docker 沙箱未实装 | 编码任务直接在宿主机跑 |
-| TaskIQ/Redis 未接入 | 进程重启任务丢失 |
+| Docker 沙箱未实装（`CALLIO_USE_DOCKER=1` 仅路由，无真实隔离） | 编码任务直接在宿主机跑 |
 | meta/ 自进化未接入运行时 | 设计规约未落地 |
-| 无自动化测试 | 回归风险高 |
+| LiveKit/WebRTC 未接入 | 依赖 WebSocket PCM，弱网体验差 |
+| 流式 TTS 未开启 | 首响延迟较高 |
 
 ---
 
@@ -48,16 +59,17 @@ Phase 6  自进化 & 高可用（远期）   ← 按需
 
 ---
 
-## 三、Phase 1 — 编码 Agent 打通（P0）
+## 三、Phase 1 — 编码 Agent 打通（P0） ✅ 已完成
 
 **目标：** 对话中说「写代码」→ 确认后**可靠**调用 Hermes / OpenClaw / 自定义 CLI。
 
 ### 1.1 Agent 解析器（`worker/agent_resolver.py`）✅
 
-- `CALLIO_AGENT_BACKEND`：`hermes` / `openclaw` / `claude`
-- `CALLIO_AGENT_COMMAND` 支持 `{task}` 占位符
-- 自动检测顺序：hermes → openclaw → claude
+- `CALLIO_AGENT_BACKEND`：`hermes` / `openclaw` / `goose` / `aider` / `claude`
+- `CALLIO_AGENT_COMMAND` 支持 `{task}` 占位符（自定义 agent 完全可用）
+- 自动检测顺序：hermes → openclaw → goose → aider → claude
 - 无 agent 时明确 FAILED（不再模拟成功）
+- 13 个单元测试覆盖（`tests/test_agent_resolver.py`）
 
 ### 1.2 结构化编码 Prompt（`worker/prompt_builder.py`）✅
 
@@ -84,9 +96,9 @@ Phase 6  自进化 & 高可用（远期）   ← 按需
 
 ### 验收标准
 
-- [ ] 助手说话时用户插话，TTS 立即停止
-- [ ] 用户问「进展如何」无需重复描述即可得到最新状态
-- [ ] 手机可点按钮确认任务
+- [x] 助手说话时用户插话，TTS 立即停止（`BargeInProcessor` 广播 `InterruptionFrame`）
+- [x] 用户问「进展如何」无需重复描述即可得到最新状态（`SessionHook` + `context_updater`）
+- [x] 手机可点按钮确认任务（共享 `client.js` 动态生成确认/取消按钮）
 
 ---
 
@@ -135,9 +147,9 @@ analyze_runner:
 
 ### 验收标准
 
-- [ ] 重启 Callio 后 PENDING 任务可继续
-- [ ] 可取消长时间运行的 Hermes 任务
-- [ ] API 可查询任意任务完整日志
+- [x] 重启 Callio 后 PENDING 任务可继续（`TaskDispatcher.resume_pending()` + `python -m callio.worker`）
+- [x] 可取消长时间运行的 Hermes 任务（`POST /api/v1/tasks/{id}/cancel`，信号终止子进程）
+- [x] API 可查询任意任务完整日志（`GET /api/v1/tasks/{id}/runs`）
 
 ---
 
@@ -228,7 +240,7 @@ worker/runner.py              worker/agent_resolver.py        worker/queue.py
   └ _resolve_command (脆)       └ 多 agent 统一                 └ TaskIQ/Redis
 orchestrator/ (已有)          + context_refresh               + workspace_router
 voice/pipeline.py             + barge-in + dynamic ctx        + streaming TTS
-web/static/index.html         + 确认按钮 + 进度条              + 会话历史页
+app/web + app/mobile         + 确认按钮 + 会话历史             + 多端统一交互
 meta/ (闲置)                  —                               + watchdog 接入
 ```
 

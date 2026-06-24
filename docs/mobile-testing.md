@@ -1,6 +1,6 @@
 # 手机端语音测试指南
 
-Callio 的 Web 语音客户端通过浏览器采集麦克风，经 WebSocket 将 PCM 音频发送到 Mac 上的服务。Mac 本机测试通常可直接使用，手机端需要额外注意 **HTTPS** 与 **麦克风权限**。
+Callio 的移动端页面通过浏览器采集麦克风，经 WebSocket 将 PCM 音频发送到 Mac 上的服务。Mac 本机测试通常可直接使用，手机端需要额外注意 **HTTPS** 与 **麦克风权限**。
 
 ## 为什么 Mac 可以、手机不行？
 
@@ -50,6 +50,8 @@ Callio 的 Web 语音客户端通过浏览器采集麦克风，经 WebSocket 将
 
 局域网 IP 变化时会自动重新生成证书。跳过二维码：`./scripts/start-mobile-https.sh --no-qr`
 
+二维码默认会打开 `/app/mobile/index.html`。
+
 ### 手动步骤（可选）
 
 **1. 在 Mac 上生成证书**
@@ -74,7 +76,7 @@ export CALLIO_HF_ENDPOINT=https://hf-mirror.com  # 可选，加速首次模型�
 
 终端应显示：
 
-- 链接为 `https://192.168.x.x:8000/static/index.html`
+- 链接为 `https://192.168.x.x:8000/app/mobile/index.html`
 - 提示「已启用 HTTPS，手机端可使用麦克风」
 
 ### 3. 手机操作
@@ -117,7 +119,7 @@ ngrok http 8000
 用手机浏览器打开 ngrok 提供的 HTTPS 地址，例如：
 
 ```text
-https://xxxx.ngrok-free.app/static/index.html
+https://xxxx.ngrok-free.app/app/mobile/index.html
 ```
 
 按页面提示允许麦克风即可。
@@ -128,7 +130,7 @@ https://xxxx.ngrok-free.app/static/index.html
 
 为避免 iOS 上用户点击手势失效，页面按以下顺序启动：
 
-1. 用户点击「开始对话」
+1. 用户点击「开始语音」
 2. **立即**请求麦克风权限（显示「请允许使用麦克风...」）
 3. 权限通过后连接 WebSocket（显示「正在连接服务...」）
 4. 成功后显示「正在录音，请说话...」

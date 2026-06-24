@@ -21,6 +21,15 @@ from callio.voice.web_tts import create_tts
 from callio.voice.whisper_loader import create_whisper_stt, preload_whisper, wait_for_whisper
 
 
+def _create_stt(settings: Settings):
+    """Return the appropriate STT service based on *stt_backend* setting."""
+    backend = (settings.stt_backend or "whisper").strip().lower()
+    if backend == "sensevoice":
+        from callio.voice.funasr_loader import create_sensevoice_stt
+        return create_sensevoice_stt(settings)
+    return create_whisper_stt(settings)
+
+
 async def on_user_speech_start(transport, pipeline) -> None:
     if hasattr(transport, "send_control_message"):
         await transport.send_control_message({"action": "mute_tts"})
@@ -38,10 +47,12 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
 
     @app.on_event("startup")
     async def preload_voice_models_on_startup() -> None:
-        await asyncio.gather(
-            preload_whisper(settings),
-            preload_tts(settings),
-        )
+        backend = (settings.stt_backend or "whisper").strip().lower()
+        if backend == "sensevoice":
+            from callio.voice.funasr_loader import preload_funasr
+            await asyncio.gather(preload_funasr(settings), preload_tts(settings))
+        else:
+            await asyncio.gather(preload_whisper(settings), preload_tts(settings))
 
     @app.on_event("shutdown")
     async def shutdown_voice_sessions() -> None:
@@ -159,7 +170,12 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 await self.push_frame(frame, direction)
 
         await websocket.accept()
-        await wait_for_whisper(settings)
+        backend = (settings.stt_backend or "whisper").strip().lower()
+        if backend == "sensevoice":
+            from callio.voice.funasr_loader import wait_for_funasr
+            await wait_for_funasr(settings)
+        else:
+            await wait_for_whisper(settings)
         await wait_for_tts(settings)
 
         if orchestrator is not None:
@@ -209,7 +225,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             )
         )
 
-        stt = create_whisper_stt(settings)
+        stt = _create_stt(settings)
 
         llm = OLLamaLLMService(
             base_url=settings.ollama_base_url,

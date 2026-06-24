@@ -70,7 +70,10 @@ class ConnectionManager:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    Path(settings.app_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.static_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.mobile_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.shared_dir).mkdir(parents=True, exist_ok=True)
 
     database = Database(settings)
     memory_hub = MemoryHub(database, settings)
@@ -85,6 +88,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return RedirectResponse(url=WEB_CLIENT_PATH)
 
     app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
+    app.mount("/app/web", StaticFiles(directory=settings.static_dir), name="app-web")
+    app.mount("/app/mobile", StaticFiles(directory=settings.mobile_dir), name="app-mobile")
+    app.mount("/app/shared", StaticFiles(directory=settings.shared_dir), name="app-shared")
     app.state.settings = settings
     app.state.database = database
     app.state.memory_hub = memory_hub
