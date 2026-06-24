@@ -4,7 +4,8 @@ Callio is a voice-first autonomous OS companion built around a modular Python se
 
 - `callio/config` — runtime settings
 - `callio/core` — FastAPI API, SQLite state, memory hub
-- `callio/web` — browser voice client (`static/index.html`)
+- `app/web` / `app/mobile` / `app/cli` — user-facing web, mobile, CLI clients
+- `callio/web` — client path registry for serving the `app/` workspace
 - `callio/voice` — Pipecat voice pipeline (Whisper STT, ChatTTS, Ollama LLM)
 - `callio/worker` — async task dispatching, sandbox runner scaffolding
 - `callio/meta` — shadow rollout and sanity-check scaffolding
@@ -30,6 +31,34 @@ export CALLIO_HF_ENDPOINT=https://hf-mirror.com
 跳过终端二维码：`./venv/bin/python -m callio --no-qr`
 
 > **请使用 `venv` 内的 Python 启动。** 若用 conda / 系统 `python`，可能加载到不兼容的 `transformers` 版本，导致 ChatTTS 回退到 macOS `say`。
+
+## User clients
+
+新增统一的 `app/` 目录，集中管理所有用户交互端：
+
+```text
+app/
+├── cli/      # 命令行任务/会话操作
+├── mobile/   # 手机端页面（二维码默认打开）
+├── shared/   # Web / Mobile 共用样式与脚本
+└── web/      # 桌面 Web 协作台
+```
+
+默认入口：
+
+- Web：`/app/web/index.html`
+- Mobile：`/app/mobile/index.html`
+- 兼容旧地址：`/static/index.html`
+
+CLI 示例：
+
+```bash
+python app/cli/main.py health
+python app/cli/main.py sessions
+python app/cli/main.py dispatch --title "整理清单" --description "把当前需求拆成后台任务"
+```
+
+更多说明见 [docs/user-clients.md](docs/user-clients.md)。
 
 ## Configuration
 
@@ -59,6 +88,10 @@ export CALLIO_HF_ENDPOINT=https://hf-mirror.com
 | `CALLIO_OLLAMA_BASE_URL` | `http://localhost:11434/v1` | Ollama OpenAI-compatible API |
 | `CALLIO_SSL_CERT` | _(empty)_ | HTTPS certificate path (required for mobile microphone) |
 | `CALLIO_SSL_KEY` | _(empty)_ | HTTPS private key path |
+| `CALLIO_APP_DIR` | `./app` | Top-level user client workspace |
+| `CALLIO_STATIC_DIR` | `./app/web` | Web client directory (`/static` + `/app/web`) |
+| `CALLIO_MOBILE_DIR` | `./app/mobile` | Mobile client directory |
+| `CALLIO_SHARED_DIR` | `./app/shared` | Shared JS/CSS assets for clients |
 | `CALLIO_PORT` | `8000` | Server port |
 | `CALLIO_HOST` | `0.0.0.0` | Bind address |
 
@@ -168,6 +201,7 @@ export CALLIO_AGENT_COMMAND="aider --yes-always --message {task}"
 ```
 
 - 手机测试：[docs/mobile-testing.md](docs/mobile-testing.md)
+- 用户交互端说明：[docs/user-clients.md](docs/user-clients.md)
 - 全双工语音架构：[docs/voice-full-duplex.md](docs/voice-full-duplex.md)
 - 迭代优化路线图：[docs/iteration-roadmap.md](docs/iteration-roadmap.md)
 
@@ -193,6 +227,13 @@ export CALLIO_AGENT_COMMAND="aider --yes-always --message {task}"
 - `POST /api/v1/sessions/{session_id}/tasks/cancel` — cancel proposed tasks
 - `POST /api/v1/tasks/{node_id}/cancel` — stop a RUNNING task
 - `GET /api/v1/tasks/{node_id}/runs` — task execution logs
+
+## Client URLs
+
+- `GET /app/web/index.html` — 桌面 Web 协作台（Copilot 风格布局）
+- `GET /app/mobile/index.html` — 手机交互页
+- `GET /app/shared/client.js` / `client.css` — Web / Mobile 共用前端资源
+- `GET /static/index.html` — 兼容旧入口，映射到新 Web 客户端
 
 ## Troubleshooting
 
@@ -235,6 +276,7 @@ export CALLIO_HF_ENDPOINT=https://hf-mirror.com
 from callio.app import app
 print(len(app.routes))
 PY
+python -m unittest discover tests
 
 # 端到端语音冒烟（需本机 say + Ollama + 服务已启动）
 ./venv/bin/python scripts/e2e-voice-test.py
@@ -243,6 +285,6 @@ PY
 
 ### Session 续聊
 
-- 浏览器：开始对话前在下拉框选择历史会话
+- 浏览器：在左侧历史会话面板中选择目标会话，再开始对话
 - WebSocket：`ws://host/ws?resume_session_id=<uuid>`
 - API：`GET /api/v1/sessions/{session_id}` 查看历史转写与摘要

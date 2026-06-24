@@ -16,8 +16,10 @@
 | 通话中提议 / 确认 / 并行派发任务 | ✅ |
 | 三类任务 SUMMARIZE / ANALYZE / EXECUTE | ✅ |
 | 转写缓冲 + 挂断摘要 + `session_events` / `task_runs` | ✅ |
-| `/ws/status` + 简易任务面板 | ✅ |
+| `app/` 多端交互目录（web / mobile / cli） | ✅ |
+| `/ws/status` + Copilot 风格任务面板 | ✅ |
 | `GET /api/v1/sessions/{id}/tasks` | ✅ |
+| `tests/` 单元测试基线 | ✅ |
 
 ### 主要缺口
 
@@ -31,7 +33,6 @@
 | Docker 沙箱未实装 | 编码任务直接在宿主机跑 |
 | TaskIQ/Redis 未接入 | 进程重启任务丢失 |
 | meta/ 自进化未接入运行时 | 设计规约未落地 |
-| 无自动化测试 | 回归风险高 |
 
 ---
 
@@ -228,7 +229,7 @@ worker/runner.py              worker/agent_resolver.py        worker/queue.py
   └ _resolve_command (脆)       └ 多 agent 统一                 └ TaskIQ/Redis
 orchestrator/ (已有)          + context_refresh               + workspace_router
 voice/pipeline.py             + barge-in + dynamic ctx        + streaming TTS
-web/static/index.html         + 确认按钮 + 进度条              + 会话历史页
+app/web + app/mobile         + 确认按钮 + 会话历史             + 多端统一交互
 meta/ (闲置)                  —                               + watchdog 接入
 ```
 

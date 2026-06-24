@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Callio Web</title>
+    <link rel="stylesheet" href="/app/shared/client.css">
+</head>
+<body data-client-mode="web">
+    <div class="shell">
+        <aside class="panel sidebar">
+            <div class="brand">
+                <span class="eyebrow">Callio</span>
+                <h1>Copilot 风格协作台</h1>
+                <p>左侧管理历史会话，中间专注对话，右侧跟踪后台任务与执行状态。</p>
+            </div>
+            <div>
+                <div class="section-title">历史会话</div>
+                <div id="sessionList" class="session-list"></div>
+            </div>
+            <div>
+                <div class="section-title">快捷任务</div>
+                <div class="quick-actions">
+                    <button type="button" class="chip ghost-btn" data-task-prompt="整理当前需求并生成执行清单">生成执行清单</button>
+                    <button type="button" class="chip ghost-btn" data-task-prompt="总结当前会话并输出下一步建议">生成会话总结</button>
+                    <button type="button" class="chip ghost-btn" data-task-prompt="分析当前仓库中与用户交互相关的模块">分析交互模块</button>
+                </div>
+            </div>
+        </aside>
+
+        <main class="panel chat-panel">
+            <div class="chat-header">
+                <div>
+                    <span class="eyebrow">Voice + Tasks</span>
+                    <h2>多端交互控制台</h2>
+                    <p id="resumeLabel" class="helper-text">当前目标会话：新会话</p>
+                </div>
+                <div class="toolbar">
+                    <span id="statusPill" class="pill">待连接</span>
+                    <button id="refreshBtn" type="button" class="ghost-btn">刷新</button>
+                    <button id="startBtn" type="button" class="primary-btn">开始对话</button>
+                    <button id="stopBtn" type="button" class="danger-btn" disabled>结束对话</button>
+                </div>
+            </div>
+            <div class="message-stream" id="messages">
+                <div class="message assistant">
+                    <small>Callio</small>
+                    <div>这里会展示语音转写、助手回复与任务反馈。开始对话后即可像 GitHub Copilot App 一样集中查看协作上下文。</div>
+                </div>
+            </div>
+            <div class="composer">
+                <div class="badge-row">
+                    <span id="statusHint" class="pill">选择历史会话或直接开始新对话。</span>
+                </div>
+                <div class="composer-grid">
+                    <input id="taskTitle" type="text" placeholder="手动派发任务标题（可选）">
+                    <textarea id="taskInput" placeholder="输入要手动派发的任务，例如：整理 app 目录的移动端交互流程并生成任务拆解。"></textarea>
+                </div>
+                <div class="toolbar">
+                    <button id="dispatchTaskBtn" type="button" class="primary-btn">派发后台任务</button>
+                    <button id="confirmAllBtn" type="button" class="ghost-btn">确认全部提议</button>
+                </div>
+            </div>
+        </main>
+
+        <aside class="panel task-panel">
+            <div>
+                <div class="section-title">后台任务</div>
+                <p class="helper-text">提议、确认、执行、停止都集中展示，方便在通话中并行协作。</p>
+            </div>
+            <div id="tasks" class="task-list">
+                <p class="empty-state">开始对话后，这里会展示后台任务与状态流。</p>
+            </div>
+            <div>
+                <div class="section-title">交互建议</div>
+                <ul class="hint-list">
+                    <li>语音用于连续沟通，手动任务框用于快速补充明确执行项。</li>
+                    <li>移动端建议通过 HTTPS 打开手机页面以启用麦克风。</li>
+                    <li>CLI 端可用于查看健康状态、会话、任务与确认操作。</li>
+                </ul>
+            </div>
+        </aside>
+    </div>
+    <script src="/app/shared/client.js"></script>
+</body>
+</html>

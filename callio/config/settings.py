@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from callio.web import STATIC_DIR
+from callio.web import APP_DIR, MOBILE_DIR, SHARED_DIR, STATIC_DIR
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -15,7 +15,10 @@ class Settings:
     app_title: str = "Callio API Gateway"
     app_version: str = "1.0"
     db_path: str = str(BASE_DIR / "callio_local.db")
+    app_dir: str = os.getenv("CALLIO_APP_DIR", str(APP_DIR))
     static_dir: str = os.getenv("CALLIO_STATIC_DIR", str(STATIC_DIR))
+    mobile_dir: str = os.getenv("CALLIO_MOBILE_DIR", str(MOBILE_DIR))
+    shared_dir: str = os.getenv("CALLIO_SHARED_DIR", str(SHARED_DIR))
     session_token_limit: int = 10
     voice_response_limit: int = 30
     llm_model: str = os.getenv("CALLIO_LLM_MODEL", "qwen2.5:7b")

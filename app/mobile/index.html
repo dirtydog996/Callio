@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Callio Mobile</title>
+    <link rel="stylesheet" href="/app/shared/client.css">
+</head>
+<body data-client-mode="mobile">
+    <div class="shell">
+        <main class="panel chat-panel">
+            <div class="chat-header">
+                <div>
+                    <span class="eyebrow">Callio Mobile</span>
+                    <h2>移动协作端</h2>
+                    <p id="resumeLabel" class="helper-text">扫码进入后，优先使用语音继续协作。</p>
+                </div>
+                <div class="toolbar">
+                    <span id="statusPill" class="pill warning">移动端就绪</span>
+                    <button id="refreshBtn" type="button" class="ghost-btn mobile-only">刷新</button>
+                    <button id="startBtn" type="button" class="primary-btn">开始语音</button>
+                    <button id="stopBtn" type="button" class="danger-btn" disabled>停止</button>
+                </div>
+            </div>
+            <div class="message-stream" id="messages">
+                <div class="message assistant">
+                    <small>Callio</small>
+                    <div>这是手机端界面：保持语音对话、查看任务状态，并在需要时快速补充手动任务。</div>
+                </div>
+            </div>
+            <div class="composer">
+                <div class="badge-row">
+                    <span id="statusHint" class="pill">请通过 HTTPS 访问，以获得麦克风权限。</span>
+                </div>
+                <div class="composer-grid">
+                    <input id="taskTitle" type="text" placeholder="任务标题（可选）">
+                    <textarea id="taskInput" placeholder="补充需要后台执行的任务，例如：帮我整理当前待办并继续推进。"></textarea>
+                </div>
+                <div class="toolbar">
+                    <button id="dispatchTaskBtn" type="button" class="primary-btn">派发任务</button>
+                    <button id="confirmAllBtn" type="button" class="ghost-btn">确认全部</button>
+                </div>
+            </div>
+        </main>
+        <aside class="panel task-panel">
+            <div>
+                <div class="section-title">后台任务</div>
+                <p class="helper-text">确认、运行、失败、完成状态都会实时同步到这里。</p>
+            </div>
+            <div id="tasks" class="task-list">
+                <p class="empty-state">开始语音或派发任务后，这里会显示任务流。</p>
+            </div>
+            <div>
+                <div class="section-title">历史会话</div>
+                <div id="sessionList" class="session-list"></div>
+            </div>
+        </aside>
+    </div>
+    <script src="/app/shared/client.js"></script>
+</body>
+</html>
