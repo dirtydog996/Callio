@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from typing import Awaitable, Callable
 
-from openai import AsyncOpenAI
-
 from callio.config.settings import Settings, get_settings
 from callio.core.database import Database
 from callio.core.task_log import TaskLog
+from callio.llm.factory import build_chat_client
 from callio.worker.repo_context import collect_repo_context
 
 ProgressCallback = Callable[[dict[str, object]], Awaitable[None]]
@@ -17,10 +16,7 @@ class AnalyzeRunner:
         self.database = database
         self.settings = settings or get_settings()
         self.task_log = TaskLog(database)
-        self._client = AsyncOpenAI(
-            base_url=self.settings.ollama_base_url,
-            api_key="ollama",
-        )
+        self._client = build_chat_client(self.settings)
 
     async def run(
         self,

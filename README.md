@@ -1,6 +1,10 @@
 # Callio
 
+![Callio Logo](app/shared/callio-logo.svg)
+
 Call your PC, talk to your agent, and let it handle the I/O.
+
+I just called my computer from the subway, asked Callio to render a video and organize my documents, and it called me back when it was done. Callio is now open-source!
 
 Callio is a voice-first autonomous OS companion built with a modular Python service architecture. It combines real-time voice interaction, multi-client access (Web/Mobile/CLI), and async task execution through pluggable agent backends.
 
@@ -32,6 +36,7 @@ Core modules:
 - Pluggable STT backends (`whisper`, `sensevoice`)
 - Pluggable TTS backends (`chatt`, `say`, `edge`, `cosyvoice`, `fish`)
 - Pluggable agent backends (`hermes`, `openclaw`, `goose`, `aider`, `claude`)
+- Pluggable LLM providers (`ollama`, `openai`, `anthropic`, `gemini`, `openai_compatible`)
 
 ## Feature List
 
@@ -104,8 +109,16 @@ python app/cli/main.py dispatch --title "Plan tasks" --description "Break curren
 | `CALLIO_TTS_BACKEND` | `chatt` | TTS backend (`chatt`, `say`, `edge`, `cosyvoice`, `fish`) |
 | `CALLIO_AGENT_BACKEND` | _(empty)_ | Force agent backend (`hermes`, `openclaw`, `goose`, `aider`, `claude`) |
 | `CALLIO_AGENT_COMMAND` | _(empty)_ | Custom command template (`{task}` placeholder) |
-| `CALLIO_LLM_MODEL` | `qwen2.5:7b` | Ollama model name |
-| `CALLIO_OLLAMA_BASE_URL` | `http://localhost:11434/v1` | Ollama OpenAI-compatible endpoint |
+| `CALLIO_LLM_PROVIDER` | `ollama` | LLM provider (`ollama`, `openai`, `anthropic`, `gemini`, `openai_compatible`) |
+| `CALLIO_LLM_MODEL` | `qwen2.5:7b` | Model name for the selected LLM provider |
+| `CALLIO_LLM_API_KEY` | _(empty)_ | API key for the selected provider (falls back to `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) |
+| `CALLIO_LLM_BASE_URL` | _(empty)_ | Base URL override for `openai_compatible` or to route any provider through a proxy |
+| `CALLIO_OLLAMA_BASE_URL` | `http://localhost:11434/v1` | Ollama endpoint (used when `CALLIO_LLM_PROVIDER=ollama`; kept for backward compat) |
+| `CALLIO_NOTIFY_WECHAT_WEBHOOK` | _(empty)_ | WeChat webhook URL for end-of-session summary notifications |
+| `CALLIO_NOTIFY_FEISHU_WEBHOOK` | _(empty)_ | Feishu webhook URL for end-of-session summary notifications |
+| `CALLIO_NOTIFY_DISCORD_WEBHOOK` | _(empty)_ | Discord webhook URL for end-of-session summary notifications |
+| `CALLIO_NOTIFY_TELEGRAM_WEBHOOK` | _(empty)_ | Telegram webhook URL for end-of-session summary notifications |
+| `CALLIO_NOTIFY_TIMEOUT_SEC` | `8` | Timeout (seconds) for notification webhook requests |
 | `CALLIO_PORT` | `8000` | Service port |
 | `CALLIO_HOST` | `0.0.0.0` | Service bind host |
 | `CALLIO_APP_DIR` | `./app` | Top-level client workspace |
