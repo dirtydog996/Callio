@@ -13,6 +13,12 @@
         isRecording: false,
         playbackNextTime: 0,
         taskNodes: new Map(),
+        assistantDraft: {
+            messageBody: null,
+            reportItem: null,
+            label: "",
+            at: 0,
+        },
     };
 
     const elements = {
@@ -191,31 +197,86 @@
         elements.statusHint.textContent = hint || "";
     }
 
-    function addMessage(role, text, label) {
+    function normalizeDisplayText(value) {
+        const text = value == null ? "" : String(value);
+        const unified = text.replace(/\r\n?/g, "\n");
+        const lines = unified.split("\n");
+        const nonEmpty = lines.filter((line) => line.length > 0);
+        const charByCharLines = nonEmpty.length >= 8 && nonEmpty.every((line) => line.trim().length <= 1);
+        if (charByCharLines) {
+            return nonEmpty.join("");
+        }
+        return unified;
+    }
+
+    function resetAssistantDraft() {
+        state.assistantDraft.messageBody = null;
+        state.assistantDraft.reportItem = null;
+        state.assistantDraft.label = "";
+        state.assistantDraft.at = 0;
+    }
+
+    function mergeText(base, fragment) {
+        if (!base) return fragment || "";
+        if (!fragment) return base;
+        return `${base}${fragment}`;
+    }
+
+    function addMessage(role, text, label, options) {
+        const opts = options || {};
+        const normalizedText = normalizeDisplayText(text);
+        const stream = Boolean(opts.stream) && role === "assistant";
+        const activeLabel = label || "Callio";
+        const canAppend = stream
+            && state.assistantDraft.messageBody
+            && state.assistantDraft.label === activeLabel
+            && Date.now() - state.assistantDraft.at < 2500;
+        if (canAppend) {
+            state.assistantDraft.messageBody.textContent = mergeText(state.assistantDraft.messageBody.textContent, normalizedText);
+            state.assistantDraft.at = Date.now();
+            addLiveReport(role, normalizedText, label, { stream: true });
+            elements.messages.scrollTop = elements.messages.scrollHeight;
+            return;
+        }
+        if (!stream) {
+            resetAssistantDraft();
+        }
         const div = document.createElement("div");
         div.className = `message ${role}`;
         const meta = document.createElement("small");
         const _msgTime = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
         meta.textContent = `${label || (role === "user" ? "You" : "Callio")} · ${_msgTime}`;
         const body = document.createElement("div");
-        body.textContent = text;
+        body.textContent = normalizedText;
         div.append(meta, body);
         elements.messages.appendChild(div);
         elements.messages.scrollTop = elements.messages.scrollHeight;
-        addLiveReport(role, text, label);
+        if (stream) {
+            state.assistantDraft.messageBody = body;
+            state.assistantDraft.label = activeLabel;
+            state.assistantDraft.at = Date.now();
+        }
+        addLiveReport(role, normalizedText, label, { stream });
     }
 
     function resetMessages() {
         elements.messages.innerHTML = "";
+        resetAssistantDraft();
     }
 
     function resetLiveReport() {
         if (!elements.liveReport) return;
         elements.liveReport.innerHTML = "<p class='empty-state'>User and assistant text appears here live after the conversation starts.</p>";
+        state.assistantDraft.reportItem = null;
     }
 
-    function addLiveReport(role, text, label) {
+    function addLiveReport(role, text, label, options) {
         if (!elements.liveReport || !text) return;
+        const opts = options || {};
+        if (Boolean(opts.stream) && role === "assistant" && state.assistantDraft.reportItem) {
+            state.assistantDraft.reportItem.textContent = mergeText(state.assistantDraft.reportItem.textContent, text);
+            return;
+        }
         const empty = elements.liveReport.querySelector(".empty-state");
         if (empty) empty.remove();
         const item = document.createElement("div");
@@ -223,6 +284,9 @@
         const time = new Date().toLocaleTimeString();
         item.textContent = `[${time}] ${label || (role === "user" ? "You" : "Callio")}: ${text}`;
         elements.liveReport.prepend(item);
+        if (Boolean(opts.stream) && role === "assistant") {
+            state.assistantDraft.reportItem = item;
+        }
     }
 
     function formatSessionLabel(session) {
@@ -524,21 +588,33 @@
         return error && error.message ? error.message : "Could not start the microphone";
     }
 
-    function ensureMicrophoneSupported() {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            throw new Error("This browser does not support microphone access.");
+    function getUserMediaFn() {
+        if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
+            return (constraints) => navigator.mediaDevices.getUserMedia(constraints);
         }
+        const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+        if (typeof legacy === "function") {
+            return (constraints) => new Promise((resolve, reject) => legacy.call(navigator, constraints, resolve, reject));
+        }
+        return null;
+    }
+
+    function ensureMicrophoneSupported() {
         const host = window.location.hostname;
         const isLocalhost = host === "localhost" || host === "127.0.0.1";
         if (!window.isSecureContext && !isLocalhost) {
             throw new Error("This is an insecure HTTP connection, so mobile cannot use the microphone. Switch to HTTPS.");
+        }
+        if (!getUserMediaFn()) {
+            throw new Error("This browser does not support microphone access.");
         }
     }
 
     async function requestMicrophone() {
         ensureMicrophoneSupported();
         setStatus("warning", "Waiting for permission", "Please allow the browser to use the microphone.");
-        state.mediaStream = await navigator.mediaDevices.getUserMedia({
+        const requestUserMedia = getUserMediaFn();
+        state.mediaStream = await requestUserMedia({
             audio: {
                 channelCount: 1,
                 echoCancellation: true,
@@ -591,6 +667,7 @@
             if (typeof event.data !== "string") return;
             const data = JSON.parse(event.data);
             if (data.type === "session") {
+                resetAssistantDraft();
                 state.sessionId = data.session_id;
                 if (data.resumed) {
                     setStatus("success", "Resuming session", data.title || state.sessionId.slice(0, 8));
@@ -599,11 +676,13 @@
                 }
                 await refreshSessionTasks(state.sessionId);
             } else if (data.type === "transcription") {
+                resetAssistantDraft();
                 stopDownlinkPlayback();
                 addMessage("user", data.text);
             } else if (data.type === "assistant") {
-                addMessage("assistant", data.text);
+                addMessage("assistant", data.text, undefined, { stream: true });
             } else if (data.type === "interrupt") {
+                resetAssistantDraft();
                 stopDownlinkPlayback();
             }
         };

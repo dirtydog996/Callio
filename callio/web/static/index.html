@@ -449,11 +449,18 @@
             return (error && error.message) ? error.message : 'Could not start the microphone';
         }
 
-        function ensureMicrophoneSupported() {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('This browser does not support microphone access. Try Chrome or Safari.');
+        function getUserMediaFn() {
+            if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+                return (constraints) => navigator.mediaDevices.getUserMedia(constraints);
             }
+            const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+            if (typeof legacy === 'function') {
+                return (constraints) => new Promise((resolve, reject) => legacy.call(navigator, constraints, resolve, reject));
+            }
+            return null;
+        }
 
+        function ensureMicrophoneSupported() {
             const host = window.location.hostname;
             const isLocalhost = host === 'localhost' || host === '127.0.0.1';
             if (!window.isSecureContext && !isLocalhost) {
@@ -461,13 +468,18 @@
                     'This is an insecure HTTP connection, so mobile cannot use the microphone. Run ./scripts/start-mobile-https.sh and use HTTPS.'
                 );
             }
+
+            if (!getUserMediaFn()) {
+                throw new Error('This browser does not support microphone access. Try Chrome or Safari.');
+            }
         }
 
         async function requestMicrophone() {
             ensureMicrophoneSupported();
             updateStatus('connecting', '[1/2] Please allow microphone access (if no prompt appears, check HTTPS)...');
+            const requestUserMedia = getUserMediaFn();
             mediaStream = await withTimeout(
-                navigator.mediaDevices.getUserMedia({
+                requestUserMedia({
                     audio: {
                         channelCount: 1,
                         echoCancellation: true,
