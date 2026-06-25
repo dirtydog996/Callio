@@ -89,6 +89,8 @@ class Database:
             conn.execute("ALTER TABLE spec_nodes ADD COLUMN kind TEXT DEFAULT 'EXECUTE'")
         if "phase" not in node_cols:
             conn.execute("ALTER TABLE spec_nodes ADD COLUMN phase TEXT DEFAULT 'PROPOSED'")
+        if "result_summary" not in node_cols:
+            conn.execute("ALTER TABLE spec_nodes ADD COLUMN result_summary TEXT")
 
         conn.executescript(
             """
@@ -248,7 +250,7 @@ class Database:
             row = conn.execute(
                 """
                 SELECT node_id, session_id, feature_name, description, kind, phase,
-                       difficulty_level, status, error_log, updated_at
+                       difficulty_level, status, error_log, result_summary, updated_at
                 FROM spec_nodes WHERE node_id = ?
                 """,
                 (node_id,),
@@ -261,7 +263,7 @@ class Database:
                 rows = conn.execute(
                     """
                     SELECT node_id, session_id, feature_name, description, kind, phase,
-                           difficulty_level, status, error_log, updated_at
+                           difficulty_level, status, error_log, result_summary, updated_at
                     FROM spec_nodes
                     WHERE session_id = ?
                     ORDER BY updated_at DESC
@@ -272,11 +274,34 @@ class Database:
                 rows = conn.execute(
                     """
                     SELECT node_id, session_id, feature_name, description, kind, phase,
-                           difficulty_level, status, error_log, updated_at
+                           difficulty_level, status, error_log, result_summary, updated_at
                     FROM spec_nodes
                     ORDER BY updated_at DESC
                     """
                 ).fetchall()
+        return [dict(row) for row in rows]
+
+    def set_node_result_summary(self, node_id: str, result_summary: str) -> None:
+        with self.connection() as conn:
+            conn.execute(
+                "UPDATE spec_nodes SET result_summary = ? WHERE node_id = ?",
+                (result_summary, node_id),
+            )
+            conn.commit()
+
+    def list_completed_with_results(self, session_id: str) -> list[dict[str, object]]:
+        """Return successfully completed tasks that have a result_summary for the session."""
+        with self.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT node_id, feature_name, kind, result_summary, updated_at
+                FROM spec_nodes
+                WHERE session_id = ? AND status = 'SUCCESS'
+                  AND result_summary IS NOT NULL AND result_summary != ''
+                ORDER BY updated_at DESC
+                """,
+                (session_id,),
+            ).fetchall()
         return [dict(row) for row in rows]
 
     def count_running_tasks(self, session_id: str) -> int:

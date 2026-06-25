@@ -18,6 +18,7 @@ def _build_prompt(
     session_id: str,
     settings: Settings,
     memory_hub,
+    announced: set[str] | None,
 ) -> str:
     """Gather context from DB/memory and build the full system prompt string.
 
@@ -27,7 +28,7 @@ def _build_prompt(
     progress_block = ""
     memory_block = ""
     if settings.progress_inject:
-        progress_block = orchestrator.progress.build_context_block(session_id)
+        progress_block = orchestrator.progress.build_context_block(session_id, announced=announced)
     if settings.memory_inject and memory_hub is not None:
         memory_block = build_memory_block(memory_hub, orchestrator.database)
     resume_block = build_resume_block(orchestrator.database, session_id)
@@ -58,16 +59,20 @@ async def refresh_system_prompt(
     settings: Settings,
     *,
     memory_hub=None,
+    announced: set[str] | None = None,
 ) -> None:
     """Refresh the system prompt, offloading I/O to a thread pool executor.
 
     DB queries and vector searches run in a worker thread so the event loop
     remains unblocked.  The final write to ``context.messages`` is performed
     back on the event loop for thread safety.
+
+    ``announced`` is a set of node_ids already reported to the user.  Passing
+    it enables the proactive task-completion annotation in the context block.
     """
     if not settings.progress_inject and not settings.memory_inject:
         return
     prompt = await asyncio.to_thread(
-        _build_prompt, orchestrator, session_id, settings, memory_hub
+        _build_prompt, orchestrator, session_id, settings, memory_hub, announced
     )
     _apply_prompt(context, prompt)
