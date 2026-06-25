@@ -90,6 +90,19 @@ class Database:
         if "phase" not in node_cols:
             conn.execute("ALTER TABLE spec_nodes ADD COLUMN phase TEXT DEFAULT 'PROPOSED'")
 
+        conn.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_spec_nodes_session_status
+                ON spec_nodes(session_id, status);
+            CREATE INDEX IF NOT EXISTS idx_task_runs_session
+                ON task_runs(session_id);
+            CREATE INDEX IF NOT EXISTS idx_session_events_session
+                ON session_events(session_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_task_queue_status
+                ON task_queue(status, id ASC);
+            """
+        )
+
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
         with self._lock:
@@ -281,7 +294,7 @@ class Database:
         with self.connection() as conn:
             rows = conn.execute(
                 """
-                SELECT session_id, title, transcript, summary, action_plan, created_at, ended_at
+                SELECT session_id, title, summary, action_plan, created_at, ended_at
                 FROM sessions
                 ORDER BY created_at DESC
                 """
@@ -333,18 +346,25 @@ class Database:
         tail_limit: int = 8000,
     ) -> None:
         with self.connection() as conn:
-            row = conn.execute("SELECT stdout_tail FROM task_runs WHERE run_id = ?", (run_id,)).fetchone()
-            if not row:
-                return
-            current = row["stdout_tail"] or ""
-            merged = (current + line)[-tail_limit:]
             if progress_pct is not None:
                 conn.execute(
-                    "UPDATE task_runs SET stdout_tail = ?, progress_pct = ? WHERE run_id = ?",
-                    (merged, progress_pct, run_id),
+                    """
+                    UPDATE task_runs
+                    SET stdout_tail = substr(coalesce(stdout_tail, '') || ?, ?),
+                        progress_pct = ?
+                    WHERE run_id = ?
+                    """,
+                    (line, -tail_limit, progress_pct, run_id),
                 )
             else:
-                conn.execute("UPDATE task_runs SET stdout_tail = ? WHERE run_id = ?", (merged, run_id))
+                conn.execute(
+                    """
+                    UPDATE task_runs
+                    SET stdout_tail = substr(coalesce(stdout_tail, '') || ?, ?)
+                    WHERE run_id = ?
+                    """,
+                    (line, -tail_limit, run_id),
+                )
             conn.commit()
 
     def finish_task_run(self, run_id: str, status: str) -> None:

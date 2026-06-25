@@ -60,15 +60,18 @@ class ConnectionManager:
             self.active_connections.discard(websocket)
 
     async def broadcast_status(self, message: dict[str, Any]) -> None:
-        stale_connections: list[WebSocket] = []
         async with self._lock:
-            for connection in self.active_connections:
-                try:
-                    await connection.send_json(message)
-                except Exception:
-                    stale_connections.append(connection)
-            for connection in stale_connections:
-                self.active_connections.discard(connection)
+            connections = set(self.active_connections)
+        stale_connections: list[WebSocket] = []
+        for connection in connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                stale_connections.append(connection)
+        if stale_connections:
+            async with self._lock:
+                for connection in stale_connections:
+                    self.active_connections.discard(connection)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -110,7 +113,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/health")
     async def health() -> dict[str, Any]:
-        database.initialize()
         whisper_ready = False
         try:
             from callio.voice.whisper_loader import get_preload_error, is_whisper_ready
