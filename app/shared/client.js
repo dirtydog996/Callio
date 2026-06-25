@@ -386,6 +386,11 @@
         return state.sessionId || state.selectedSessionId || "";
     }
 
+    function _kindLabel(kind) {
+        const map = { ANALYZE: "Analyze", EXECUTE: "Execute", SUMMARIZE: "Summarize" };
+        return map[(kind || "").toUpperCase()] || kind || "";
+    }
+
     function renderTask(event) {
         if (!event || !event.event) return;
         const interesting = [
@@ -407,13 +412,23 @@
         card.className = taskCardClass(status);
         card.innerHTML = "";
 
+        // Header row: title + kind badge
         const header = document.createElement("div");
+        header.className = "task-card-header";
         const title = document.createElement("strong");
         title.textContent = taskTitle(event);
+        header.appendChild(title);
+        const kindLabel = _kindLabel(event.kind);
+        if (kindLabel) {
+            const badge = document.createElement("span");
+            badge.className = `task-kind-badge ${(event.kind || "").toLowerCase()}`;
+            badge.textContent = kindLabel;
+            header.appendChild(badge);
+        }
         const meta = document.createElement("div");
         meta.className = "helper-text";
         meta.textContent = `${event.event} · ${status}${progress != null ? ` · ${progress}%` : ""}`;
-        header.append(title, meta);
+        header.appendChild(meta);
         card.appendChild(header);
 
         if (progress != null) {
@@ -424,6 +439,25 @@
             bar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
             wrap.appendChild(bar);
             card.appendChild(wrap);
+        }
+
+        // Show result preview for completed tasks
+        const resultText = event.result_summary || event.report;
+        if (resultText && (event.event === "TASK_COMPLETED" || status === "SUCCESS")) {
+            const preview = document.createElement("div");
+            preview.className = "task-result-preview";
+            preview.textContent = resultText.length > 200
+                ? resultText.slice(0, 200) + "…"
+                : resultText;
+            card.appendChild(preview);
+        }
+
+        // Show completion toast for successful tasks arriving via WebSocket
+        if (event.event === "TASK_COMPLETED" && status === "SUCCESS" && event._live) {
+            const toastMsg = resultText
+                ? `✓ ${taskTitle(event)}: ${resultText.slice(0, 80)}${resultText.length > 80 ? "…" : ""}`
+                : `✓ Task completed: ${taskTitle(event)}`;
+            showToast(toastMsg, "success", 5000);
         }
 
         const actions = document.createElement("div");
@@ -515,7 +549,8 @@
                 const data = JSON.parse(event.data);
                 const sessionRef = currentSessionRef();
                 if (sessionRef && data.session_id && data.session_id !== sessionRef) return;
-                renderTask(data);
+                // Mark as live so renderTask can trigger completion toasts.
+                renderTask({ ...data, _live: true });
             } catch (error) {
                 console.warn("status parse error", error);
             }

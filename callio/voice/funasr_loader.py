@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import threading
 from typing import Any
 
@@ -110,8 +111,6 @@ def _transcribe_sync(model: Any, audio_int16: bytes, sample_rate: int) -> str:
     if not result:
         return ""
     text = result[0].get("text", "")
-    # SenseVoice output may contain emotion/event tags like <|HAPPY|>; strip them
-    import re
     text = re.sub(r"<\|[^|]+\|>", "", text).strip()
     return text
 

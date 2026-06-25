@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -42,20 +43,11 @@ def build_session_notification_payload(
     }
 
 
-def notify_session_finished(
+def _send_notifications_sync(
     settings: Settings,
-    *,
-    session_id: str,
-    session_title: str,
-    transcript: str,
-    summary: str,
+    payload: dict[str, str],
 ) -> None:
-    payload = build_session_notification_payload(
-        session_id=session_id,
-        session_title=session_title,
-        transcript=transcript,
-        summary=summary,
-    )
+    """Send webhook notifications synchronously (intended to run in a thread)."""
     for channel, webhook in _targets(settings):
         if not webhook:
             continue
@@ -69,3 +61,36 @@ def notify_session_finished(
                 logger.warning("Notify %s failed: HTTP %s", channel, response.status_code)
         except Exception as exc:
             logger.warning("Notify %s failed: %s", channel, exc)
+
+
+def notify_session_finished(
+    settings: Settings,
+    *,
+    session_id: str,
+    session_title: str,
+    transcript: str,
+    summary: str,
+) -> None:
+    """Schedule webhook notifications without blocking the event loop.
+
+    If called from a running asyncio event loop the HTTP calls are offloaded
+    to a thread pool via ``asyncio.create_task``.  Outside an event loop they
+    are executed synchronously (e.g. in tests or CLI scripts).
+    """
+    payload = build_session_notification_payload(
+        session_id=session_id,
+        session_title=session_title,
+        transcript=transcript,
+        summary=summary,
+    )
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is not None:
+        asyncio.create_task(
+            loop.run_in_executor(None, _send_notifications_sync, settings, payload)
+        )
+    else:
+        _send_notifications_sync(settings, payload)

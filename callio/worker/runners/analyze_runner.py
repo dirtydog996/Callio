@@ -51,6 +51,15 @@ class AnalyzeRunner:
             )
             report = (response.choices[0].message.content or "").strip()
             self.task_log.append_stdout(run_id, report, progress_pct=100)
+
+            # Extract a concise result summary (first two sentences, max 300 chars).
+            sentences = [s.strip() for s in report.replace("\n", " ").split(".") if s.strip()]
+            brief = ". ".join(sentences[:2])
+            if brief and not brief.endswith("."):
+                brief += "."
+            result_summary = brief[:300] if brief else report[:300]
+            self.database.set_node_result_summary(node_id, result_summary)
+
             self.database.update_spec_status(node_id, "SUCCESS", phase="SUCCESS")
             self.task_log.finish_run(run_id, "SUCCESS")
             await progress_callback({
@@ -60,6 +69,7 @@ class AnalyzeRunner:
                 "status": "SUCCESS",
                 "kind": "ANALYZE",
                 "report": report[:500],
+                "result_summary": result_summary,
                 "progress": 100,
             })
         except Exception as exc:

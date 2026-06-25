@@ -31,6 +31,7 @@ class ProgressSnapshot:
                 "kind": str(node.get("kind")),
                 "status": status,
                 "phase": phase,
+                "result_summary": str(node.get("result_summary") or ""),
             }
             if phase == "PROPOSED":
                 proposed.append(item)
@@ -54,7 +55,14 @@ class ProgressSnapshot:
             "last_log": last_log,
         }
 
-    def build_context_block(self, session_id: str) -> str:
+    def build_context_block(self, session_id: str, *, announced: set[str] | None = None) -> str:
+        """Build a system-prompt context block describing background task status.
+
+        ``announced`` is an optional set of node_ids whose results have already
+        been reported to the user.  Newly-completed tasks with results that are
+        NOT in ``announced`` will receive a prominent proactive annotation so the
+        LLM knows to mention them at the next natural opportunity.
+        """
         if not self.settings.progress_inject:
             return ""
         snap = self.snapshot(session_id)
@@ -76,4 +84,22 @@ class ProgressSnapshot:
             parts.append(f"Recent log: {snap['last_log'][:120]}")
         if not parts:
             return ""
-        return "[Background Task Status] " + " | ".join(parts)
+        block = "[Background Task Status] " + " | ".join(parts)
+
+        # Append proactive notification for tasks that just completed with results
+        # and have not yet been announced to the user.
+        if announced is not None:
+            fresh = self.database.list_completed_with_results(session_id)
+            new_results = [t for t in fresh if str(t["node_id"]) not in announced]
+            if new_results:
+                lines = [
+                    f'"{t["feature_name"]}": {t["result_summary"]}'
+                    for t in new_results[:3]
+                ]
+                block += (
+                    "\n[PROACTIVE ACTION REQUIRED] The following background task(s) just finished."
+                    " Briefly tell the user the result in your next spoken reply before answering"
+                    " any other question: " + " | ".join(lines)
+                )
+
+        return block

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from callio.config.settings import Settings
@@ -12,29 +13,35 @@ if TYPE_CHECKING:
     from pipecat.processors.aggregators.llm_context import LLMContext
 
 
-def refresh_system_prompt(
-    context: LLMContext,
+def _build_prompt(
     orchestrator: Orchestrator,
     session_id: str,
     settings: Settings,
-    *,
-    memory_hub=None,
-) -> None:
-    if not settings.progress_inject and not settings.memory_inject:
-        return
+    memory_hub,
+    announced: set[str] | None,
+) -> str:
+    """Gather context from DB/memory and build the full system prompt string.
+
+    This is designed to be called from a thread pool executor so that
+    synchronous DB and vector-search I/O does not block the event loop.
+    """
     progress_block = ""
     memory_block = ""
     if settings.progress_inject:
-        progress_block = orchestrator.progress.build_context_block(session_id)
+        progress_block = orchestrator.progress.build_context_block(session_id, announced=announced)
     if settings.memory_inject and memory_hub is not None:
         memory_block = build_memory_block(memory_hub, orchestrator.database)
     resume_block = build_resume_block(orchestrator.database, session_id)
-    prompt = build_system_prompt(
+    return build_system_prompt(
         settings.voice_response_limit,
         progress_block=progress_block,
         memory_block=memory_block,
         resume_block=resume_block,
     )
+
+
+def _apply_prompt(context: LLMContext, prompt: str) -> None:
+    """Patch the system message in-place on the event-loop thread."""
     messages = context.messages
     if not messages:
         context.messages = [{"role": "system", "content": prompt}]
@@ -43,3 +50,29 @@ def refresh_system_prompt(
         messages[0]["content"] = prompt
     else:
         messages.insert(0, {"role": "system", "content": prompt})
+
+
+async def refresh_system_prompt(
+    context: LLMContext,
+    orchestrator: Orchestrator,
+    session_id: str,
+    settings: Settings,
+    *,
+    memory_hub=None,
+    announced: set[str] | None = None,
+) -> None:
+    """Refresh the system prompt, offloading I/O to a thread pool executor.
+
+    DB queries and vector searches run in a worker thread so the event loop
+    remains unblocked.  The final write to ``context.messages`` is performed
+    back on the event loop for thread safety.
+
+    ``announced`` is a set of node_ids already reported to the user.  Passing
+    it enables the proactive task-completion annotation in the context block.
+    """
+    if not settings.progress_inject and not settings.memory_inject:
+        return
+    prompt = await asyncio.to_thread(
+        _build_prompt, orchestrator, session_id, settings, memory_hub, announced
+    )
+    _apply_prompt(context, prompt)
