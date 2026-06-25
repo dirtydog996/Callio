@@ -14,15 +14,9 @@ def resample_float32(samples: np.ndarray, source_rate: int, target_rate: int) ->
 
     ratio = source_rate / target_rate
     out_len = max(1, int(len(samples) / ratio))
-    resampled = np.zeros(out_len, dtype=np.float32)
-    for i in range(out_len):
-        pos = i * ratio
-        idx = int(pos)
-        frac = pos - idx
-        a = samples[min(idx, len(samples) - 1)]
-        b = samples[min(idx + 1, len(samples) - 1)]
-        resampled[i] = a + (b - a) * frac
-    return resampled
+    src_indices = np.arange(len(samples), dtype=np.float64)
+    dst_indices = np.arange(out_len, dtype=np.float64) * ratio
+    return np.interp(dst_indices, src_indices, samples).astype(np.float32)
 
 
 def float32_to_pcm_bytes(samples: np.ndarray, *, source_rate: int, target_rate: int) -> bytes:

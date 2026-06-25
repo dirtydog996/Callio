@@ -60,6 +60,8 @@ class Settings:
     task_timeout_sec: int = int(os.getenv("CALLIO_TASK_TIMEOUT_SEC", "3600"))
     global_max_parallel: int = int(os.getenv("CALLIO_GLOBAL_MAX_PARALLEL", "5"))
     execute_max_retries: int = int(os.getenv("CALLIO_EXECUTE_MAX_RETRIES", "3"))
+    # VAD: seconds of silence after user stops speaking before sending to STT
+    vad_stop_secs: float = float(os.getenv("CALLIO_VAD_STOP_SECS", "0.4"))
     # STT backend: whisper (default) | sensevoice
     stt_backend: str = os.getenv("CALLIO_STT_BACKEND", "whisper")
     # FunASR / SenseVoice model name (used when stt_backend=sensevoice)

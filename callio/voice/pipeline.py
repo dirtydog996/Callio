@@ -223,7 +223,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
 
         vad = VADProcessor(
             vad_analyzer=SileroVADAnalyzer(
-                params=VADParams(start_secs=0.2, stop_secs=0.5, min_volume=0.2)
+                params=VADParams(start_secs=0.2, stop_secs=settings.vad_stop_secs, min_volume=0.2)
             )
         )
 
