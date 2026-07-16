@@ -1,0 +1,7 @@
+venv
+__pycache__/
+*.pyc
+.callio_shadow/
+callio_local.db
+certs/
+*.pem

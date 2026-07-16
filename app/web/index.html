@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Callio — Voice Workspace</title>
+    <link rel="stylesheet" href="/app/shared/client.css">
+</head>
+<body data-client-mode="web">
+    <div class="shell">
+        <aside class="panel sidebar">
+            <div class="brand">
+                <span class="eyebrow">Callio</span>
+                <h1>Copilot-style Workspace</h1>
+                <p>Manage session history on the left, focus on the conversation in the center, and track background tasks on the right.</p>
+            </div>
+            <div>
+                <div class="section-title">Session History</div>
+                <div id="sessionList" class="session-list"></div>
+            </div>
+            <div>
+                <div class="section-title">Quick Tasks</div>
+                <div class="quick-actions">
+                    <button type="button" class="chip ghost-btn" data-task-prompt="Organize the current request and generate an execution checklist">Generate Execution Checklist</button>
+                    <button type="button" class="chip ghost-btn" data-task-prompt="Summarize the current session and suggest next steps">Generate Session Summary</button>
+                    <button type="button" class="chip ghost-btn" data-task-prompt="Analyze the modules related to user interaction in the current repository">Analyze Interaction Modules</button>
+                </div>
+            </div>
+        </aside>
+
+        <main class="panel chat-panel">
+            <div class="chat-header">
+                <div>
+                    <span class="eyebrow">Voice + Tasks</span>
+                    <h2>Multi-device Collaboration Console</h2>
+                    <p id="resumeLabel" class="helper-text">Current target session: New Session</p>
+                </div>
+                <div class="toolbar">
+                    <span id="statusPill" class="pill">Disconnected</span>
+                    <button id="refreshBtn" type="button" class="ghost-btn">Refresh</button>
+                    <button id="startBtn" type="button" class="primary-btn">Start</button>
+                    <button id="stopBtn" type="button" class="danger-btn" disabled>Stop</button>
+                </div>
+            </div>
+            <div class="message-stream" id="messages">
+                <div class="message assistant">
+                    <small>Callio</small>
+                    <div>Transcripts, assistant replies, and task updates appear here. Start a conversation to see real-time collaboration context like GitHub Copilot App.</div>
+                </div>
+            </div>
+            <div class="composer">
+                <div class="badge-row">
+                    <span id="statusHint" class="pill">Choose a previous session or start a new conversation.</span>
+                </div>
+                <div class="composer-grid">
+                    <input id="taskTitle" type="text" placeholder="Manual task title (optional)">
+                    <textarea id="taskInput" placeholder="Enter a task to dispatch manually, e.g. &quot;Refactor the mobile UI flow and generate a task breakdown.&quot;"></textarea>
+                </div>
+                <div class="toolbar">
+                    <button id="dispatchTaskBtn" type="button" class="primary-btn">Dispatch Background Task</button>
+                    <button id="confirmAllBtn" type="button" class="ghost-btn">Confirm All</button>
+                </div>
+            </div>
+        </main>
+
+        <aside class="panel task-panel">
+            <div>
+                <div class="section-title">Background Tasks</div>
+                <p class="helper-text">Proposals, confirmations, execution, and stops are all shown here for parallel collaboration during a call.</p>
+            </div>
+            <div id="tasks" class="task-list">
+                <p class="empty-state">Background tasks and status updates appear here after you start a conversation.</p>
+            </div>
+            <div>
+                <div class="section-title">Live Call Report</div>
+                <div id="liveReport" class="report-list">
+                    <p class="empty-state">User and assistant text appears here live after the conversation starts.</p>
+                </div>
+            </div>
+            <div>
+                <div class="section-title">Interaction Tips</div>
+                <ul class="hint-list">
+                    <li>Use voice for continuous collaboration, and use the manual task box for explicit follow-up work.</li>
+                    <li>Use HTTPS on mobile so the microphone can be enabled.</li>
+                    <li>Use the CLI to inspect health, sessions, tasks, and confirmation actions.</li>
+                </ul>
+            </div>
+        </aside>
+    </div>
+    <script src="/app/shared/client.js"></script>
+</body>
+</html>

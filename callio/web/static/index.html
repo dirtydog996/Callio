@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Voice Assistant</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .status.disconnected { background: #ffcccc; color: #900; }
+        .status.connecting { background: #ffffcc; color: #990; }
+        .status.connected { background: #ccffcc; color: #090; }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #startBtn {
+            background: #4CAF50;
+            color: white;
+        }
+        #startBtn:hover:not(:disabled) {
+            background: #45a049;
+        }
+        #stopBtn {
+            background: #f44336;
+            color: white;
+        }
+        #stopBtn:hover:not(:disabled) {
+            background: #da190b;
+        }
+        .transcript {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .transcript h3 {
+            margin-top: 0;
+            color: #666;
+        }
+        .user-msg {
+            color: #2196F3;
+            margin: 10px 0;
+        }
+        .bot-msg {
+            color: #4CAF50;
+            margin: 10px 0;
+        }
+        .tasks {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .task-item {
+            font-size: 13px;
+            padding: 6px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .task-proposed { color: #ff9800; }
+        .task-running { color: #2196F3; }
+        .task-success { color: #4CAF50; }
+        .task-actions {
+            margin-top: 4px;
+        }
+        .task-progress {
+            height: 4px;
+            background: #eee;
+            border-radius: 2px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+        .task-progress-bar {
+            height: 100%;
+            background: #2196F3;
+            width: 0%;
+            transition: width 0.2s;
+        }
+        .task-actions button {
+            padding: 4px 10px;
+            font-size: 12px;
+            margin-right: 6px;
+        }
+        .info {
+            text-align: center;
+            color: #666;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎙️ Local Voice Assistant</h1>
+
+    <div id="status" class="status disconnected">Disconnected</div>
+
+    <div class="controls">
+        <label for="sessionSelect" style="display:block;text-align:center;margin-bottom:8px;color:#666;font-size:14px;">
+            Session
+            <select id="sessionSelect" style="margin-left:8px;padding:6px 10px;border-radius:6px;border:1px solid #ccc;max-width:260px;">
+                <option value="">New Session</option>
+            </select>
+        </label>
+        <button id="startBtn" onclick="startSession()">Start</button>
+        <button id="stopBtn" onclick="stopSession()" disabled>Stop</button>
+    </div>
+
+    <div class="transcript">
+        <h3>Conversation</h3>
+        <div id="messages"></div>
+    </div>
+
+    <div class="tasks">
+        <h3>Background Tasks <button id="confirmAllBtn" onclick="confirmAllTasks()" style="font-size:12px">Confirm All</button></h3>
+        <div id="tasks"></div>
+    </div>
+
+    <div class="info">
+        <p>After clicking Start, please grant microphone permission immediately.</p>
+        <p>When iPhone connects over a LAN IP, the browser may reject microphone access; use HTTPS or open it in a local browser instead.</p>
+        <p>Full-duplex: microphone audio and assistant audio are both streamed as PCM over WebSocket, similar to a phone call.</p>
+        <p>For mobile testing, start HTTPS with <code>./scripts/start-mobile-https.sh</code>.</p>
+    </div>
+
+    <script>
+        const TARGET_SAMPLE_RATE = 16000;
+
+        let ws = null;
+        let statusWs = null;
+        let sessionId = null;
+        let audioContext = null;
+        let mediaStream = null;
+        let audioProcessor = null;
+        let isRecording = false;
+        let playbackNextTime = 0;
+
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        const tasksEl = document.getElementById('tasks');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const sessionSelect = document.getElementById('sessionSelect');
+
+        function formatSessionLabel(session) {
+            const title = session.title || session.session_id.slice(0, 8);
+            const ended = session.ended_at ? 'Ended' : 'Active';
+            return `${title} (${ended})`;
+        }
+
+        async function loadSessionOptions() {
+            try {
+                const response = await fetch('/api/v1/sessions');
+                const data = await response.json();
+                const items = data.items || [];
+                const current = sessionSelect.value;
+                sessionSelect.innerHTML = '<option value="">New Session</option>';
+                items.forEach((session) => {
+                    const option = document.createElement('option');
+                    option.value = session.session_id;
+                    option.textContent = formatSessionLabel(session);
+                    sessionSelect.appendChild(option);
+                });
+                if (current) {
+                    sessionSelect.value = current;
+                }
+            } catch (error) {
+                console.warn('Failed to load sessions:', error);
+            }
+        }
+
+        function renderStoredTranscript(transcript) {
+            if (!transcript) return;
+            transcript.split('\n').forEach((line) => {
+                const text = line.trim();
+                if (!text) return;
+                if (text.startsWith('user:')) {
+                    addMessage('user', text.slice(5).trim());
+                } else if (text.startsWith('assistant:')) {
+                    addMessage('bot', text.slice(10).trim());
+                }
+            });
+        }
+
+        async function preloadResumeSession(sessionId) {
+            const response = await fetch(`/api/v1/sessions/${sessionId}`);
+            const data = await response.json();
+            if (!data.found || !data.session) return;
+            messagesEl.innerHTML = '';
+            renderStoredTranscript(data.session.transcript || '');
+            if (data.session.summary) {
+                addMessage('bot', `(resumed: ${data.session.summary})`);
+            }
+        }
+
+        loadSessionOptions();
+
+        function updateStatus(status, text) {
+            statusEl.className = 'status ' + status;
+            statusEl.textContent = text;
+        }
+
+        function addMessage(role, text) {
+            const div = document.createElement('div');
+            div.className = role === 'user' ? 'user-msg' : 'bot-msg';
+            div.textContent = (role === 'user' ? '👤 ' : '🤖 ') + text;
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        const taskNodes = new Map();
+
+        function renderTask(event) {
+            if (!event || !event.event) return;
+            const interesting = [
+                'TASK_PROPOSED', 'TASK_CONFIRMED', 'TASK_RUNNING',
+                'TASK_PROGRESS', 'TASK_COMPLETED', 'SUMMARY_UPDATED'
+            ];
+            if (!interesting.includes(event.event)) return;
+
+            const nodeId = event.node_id;
+            let div = nodeId ? taskNodes.get(nodeId) : null;
+            if (!div) {
+                div = document.createElement('div');
+                if (nodeId) taskNodes.set(nodeId, div);
+                tasksEl.prepend(div);
+            }
+
+            const status = event.status || event.phase || event.event;
+            let cls = 'task-item';
+            if (status === 'PROPOSED' || event.event === 'TASK_PROPOSED') cls += ' task-proposed';
+            else if (status === 'RUNNING') cls += ' task-running';
+            else if (status === 'SUCCESS') cls += ' task-success';
+            else if (status === 'FAILED' || status === 'CANCELLED') cls += ' task-failed';
+            div.className = cls;
+            div.innerHTML = '';
+
+            const title = event.feature_name || event.title || nodeId || 'Task';
+            const label = document.createElement('div');
+            const progressPct = event.progress != null ? ` ${event.progress}%` : '';
+            label.textContent = `[${event.event}] ${title} — ${status}${progressPct}`;
+            div.appendChild(label);
+
+            if (event.progress != null && status === 'RUNNING') {
+                const barWrap = document.createElement('div');
+                barWrap.className = 'task-progress';
+                const bar = document.createElement('div');
+                bar.className = 'task-progress-bar';
+                bar.style.width = `${Math.min(100, event.progress)}%`;
+                barWrap.appendChild(bar);
+                div.appendChild(barWrap);
+            }
+
+            if (event.event === 'TASK_PROPOSED' && nodeId && sessionId) {
+                const actions = document.createElement('div');
+                actions.className = 'task-actions';
+                const confirmBtn = document.createElement('button');
+                confirmBtn.textContent = 'Confirm';
+                confirmBtn.onclick = () => postTaskAction('confirm', [nodeId]);
+                const cancelBtn = document.createElement('button');
+                cancelBtn.textContent = 'Cancel';
+                cancelBtn.onclick = () => postTaskAction('cancel', [nodeId]);
+                actions.append(confirmBtn, cancelBtn);
+                div.appendChild(actions);
+            }
+
+            if (status === 'RUNNING' && nodeId) {
+                const actions = document.createElement('div');
+                actions.className = 'task-actions';
+                const stopBtn = document.createElement('button');
+                stopBtn.textContent = 'Stop';
+                stopBtn.onclick = () => cancelRunningTask(nodeId);
+                actions.appendChild(stopBtn);
+                div.appendChild(actions);
+            }
+        }
+
+        async function confirmAllTasks() {
+            if (!sessionId) return;
+            await postTaskAction('confirm', [], true);
+        }
+
+        async function cancelRunningTask(nodeId) {
+            try {
+                const res = await fetch(`/api/v1/tasks/${nodeId}/cancel`, { method: 'POST' });
+                const data = await res.json();
+                addMessage('bot', data.message || 'Stop requested');
+            } catch (e) {
+                console.warn('cancel running failed', e);
+            }
+        }
+
+        async function postTaskAction(action, nodeIds, confirmAll = false) {
+            if (!sessionId) return;
+            const path = action === 'confirm'
+                ? `/api/v1/sessions/${sessionId}/tasks/confirm`
+                : `/api/v1/sessions/${sessionId}/tasks/cancel`;
+            const body = action === 'confirm'
+                ? { node_ids: nodeIds, confirm_all: confirmAll }
+                : { node_ids: nodeIds };
+            try {
+                const res = await fetch(path, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                addMessage('bot', data.message || `Task ${action}`);
+            } catch (e) {
+                console.warn('task action failed', e);
+            }
+        }
+
+        function connectStatusSocket() {
+            const url = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws/status';
+            statusWs = new WebSocket(url);
+            statusWs.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (sessionId && data.session_id && data.session_id !== sessionId) return;
+                    renderTask(data);
+                } catch (e) {
+                    console.warn('status parse error', e);
+                }
+            };
+        }
+
+        function disconnectStatusSocket() {
+            if (statusWs) {
+                statusWs.close();
+                statusWs = null;
+            }
+            tasksEl.innerHTML = '';
+            taskNodes.clear();
+            sessionId = null;
+        }
+
+        function withTimeout(promise, timeoutMs, message) {
+            return Promise.race([
+                promise,
+                new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error(message)), timeoutMs);
+                }),
+            ]);
+        }
+
+        function stopDownlinkPlayback() {
+            playbackNextTime = 0;
+        }
+
+        function playDownlinkPCM(arrayBuffer) {
+            if (!audioContext || !arrayBuffer || arrayBuffer.byteLength < 2) {
+                return;
+            }
+
+            const int16 = new Int16Array(arrayBuffer);
+            const float32 = new Float32Array(int16.length);
+            for (let i = 0; i < int16.length; i++) {
+                float32[i] = int16[i] / 32768;
+            }
+
+            const buffer = audioContext.createBuffer(1, float32.length, TARGET_SAMPLE_RATE);
+            buffer.getChannelData(0).set(float32);
+
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+
+            const now = audioContext.currentTime;
+            const startAt = Math.max(now + 0.02, playbackNextTime);
+            source.start(startAt);
+            playbackNextTime = startAt + buffer.duration;
+        }
+
+        function floatTo16kPCM(input, inputSampleRate) {
+            let samples = input;
+            if (inputSampleRate !== TARGET_SAMPLE_RATE) {
+                const ratio = inputSampleRate / TARGET_SAMPLE_RATE;
+                const outLen = Math.floor(input.length / ratio);
+                const resampled = new Float32Array(outLen);
+                for (let i = 0; i < outLen; i++) {
+                    const pos = i * ratio;
+                    const idx = Math.floor(pos);
+                    const frac = pos - idx;
+                    const a = input[idx] || 0;
+                    const b = input[idx + 1] || a;
+                    resampled[i] = a + (b - a) * frac;
+                }
+                samples = resampled;
+            }
+
+            const int16 = new Int16Array(samples.length);
+            for (let i = 0; i < samples.length; i++) {
+                int16[i] = Math.max(-32768, Math.min(32767, samples[i] * 32767));
+            }
+            return int16.buffer;
+        }
+
+        function microphoneErrorMessage(error) {
+            const name = error && error.name ? error.name : '';
+            if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+                return 'Microphone permission was denied. Allow microphone access for this page in your browser settings and try again.';
+            }
+            if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+                return 'No microphone was detected. Check your device or system microphone settings.';
+            }
+            if (name === 'NotReadableError' || name === 'TrackStartError') {
+                return 'The microphone is in use by another app. Close the app using it and try again.';
+            }
+            if (name === 'SecurityError' || name === 'NotSupportedError') {
+                return 'This access method does not support microphone use. On iPhone, use HTTPS or open localhost in a local browser.';
+            }
+            return (error && error.message) ? error.message : 'Could not start the microphone';
+        }
+
+        function getUserMediaFn() {
+            if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+                return (constraints) => navigator.mediaDevices.getUserMedia(constraints);
+            }
+            const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+            if (typeof legacy === 'function') {
+                return (constraints) => new Promise((resolve, reject) => legacy.call(navigator, constraints, resolve, reject));
+            }
+            return null;
+        }
+
+        function ensureMicrophoneSupported() {
+            const host = window.location.hostname;
+            const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+            if (!window.isSecureContext && !isLocalhost) {
+                throw new Error(
+                    'This is an insecure HTTP connection, so mobile cannot use the microphone. Run ./scripts/start-mobile-https.sh and use HTTPS.'
+                );
+            }
+
+            if (!getUserMediaFn()) {
+                throw new Error('This browser does not support microphone access. Try Chrome or Safari.');
+            }
+        }
+
+        async function requestMicrophone() {
+            ensureMicrophoneSupported();
+            updateStatus('connecting', '[1/2] Please allow microphone access (if no prompt appears, check HTTPS)...');
+            const requestUserMedia = getUserMediaFn();
+            mediaStream = await withTimeout(
+                requestUserMedia({
+                    audio: {
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                }),
+                15000,
+                'Microphone permission request timed out: make sure you are using HTTPS and click Allow in the system prompt.'
+            );
+        }
+
+        function startAudioPipeline() {
+            if (!audioContext) {
+                audioContext = new AudioContext();
+            }
+            const source = audioContext.createMediaStreamSource(mediaStream);
+            audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+            const silentGain = audioContext.createGain();
+            silentGain.gain.value = 0;
+
+            source.connect(audioProcessor);
+            audioProcessor.connect(silentGain);
+            silentGain.connect(audioContext.destination);
+
+            const captureRate = audioContext.sampleRate;
+            console.log('Audio capture started at', captureRate, 'Hz, sending as', TARGET_SAMPLE_RATE, 'Hz');
+
+            audioProcessor.onaudioprocess = (e) => {
+                if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) {
+                    return;
+                }
+                const inputData = e.inputBuffer.getChannelData(0);
+                ws.send(floatTo16kPCM(inputData, captureRate));
+            };
+        }
+
+        async function resumeAudioContext() {
+            if (!audioContext) {
+                return;
+            }
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+        }
+
+        function connectWebSocket() {
+            const resumeId = sessionSelect.value;
+            let wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws';
+            if (resumeId) {
+                wsUrl += `?resume_session_id=${encodeURIComponent(resumeId)}`;
+            }
+            ws = new WebSocket(wsUrl);
+            ws.binaryType = 'arraybuffer';
+            let connected = false;
+
+            ws.onmessage = (event) => {
+                if (event.data instanceof ArrayBuffer) {
+                    playDownlinkPCM(event.data);
+                    return;
+                }
+                if (typeof event.data === 'string') {
+                    const data = JSON.parse(event.data);
+                    console.log('Received:', data);
+                    if (data.type === 'session') {
+                        sessionId = data.session_id;
+                        if (data.resumed) {
+                            updateStatus('connected', `Resuming: ${data.title || sessionId.slice(0, 8)}`);
+                        }
+                    } else if (data.type === 'transcription') {
+                        stopDownlinkPlayback();
+                        addMessage('user', data.text);
+                    } else if (data.type === 'assistant') {
+                        addMessage('bot', data.text);
+                    } else if (data.type === 'interrupt') {
+                        stopDownlinkPlayback();
+                    }
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                if (connected) {
+                    updateStatus('disconnected', 'Connection error');
+                    stopSession();
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket closed');
+                if (isRecording) {
+                    updateStatus('disconnected', 'Disconnected');
+                    stopSession();
+                }
+            };
+
+            return new Promise((resolve, reject) => {
+                const initialErrorHandler = (error) => {
+                    console.error('WebSocket connect error:', error);
+                    if (!connected) {
+                        reject(new Error('WebSocket connection failed'));
+                    }
+                };
+
+                ws.addEventListener('error', initialErrorHandler, { once: true });
+                ws.onopen = () => {
+                    connected = true;
+                    console.log('WebSocket connected');
+                    resolve();
+                };
+            });
+        }
+
+        function handleStartError(error) {
+            console.error('Start session failed:', error);
+            const message = microphoneErrorMessage(error);
+            alert('Start failed: ' + message);
+            updateStatus('disconnected', message);
+            stopSession();
+        }
+
+        async function startSession() {
+            startBtn.disabled = true;
+            try {
+                await requestMicrophone();
+
+                const resumeId = sessionSelect.value;
+                if (resumeId) {
+                    updateStatus('connecting', '[1/2] Loading session history...');
+                    await preloadResumeSession(resumeId);
+                }
+
+                updateStatus('connecting', resumeId ? '[2/2] Resuming session...' : '[2/2] Connecting to voice service...');
+                connectStatusSocket();
+                await connectWebSocket();
+
+                startAudioPipeline();
+                await resumeAudioContext();
+                stopDownlinkPlayback();
+
+                isRecording = true;
+                stopBtn.disabled = false;
+                sessionSelect.disabled = true;
+                if (!resumeId) {
+                    updateStatus('connected', 'Full-duplex connected — speak now...');
+                }
+            } catch (error) {
+                handleStartError(error);
+            }
+        }
+
+        function stopSession() {
+            isRecording = false;
+            sessionSelect.disabled = false;
+            loadSessionOptions();
+            disconnectStatusSocket();
+            stopDownlinkPlayback();
+            if (audioProcessor) {
+                audioProcessor.disconnect();
+                audioProcessor.onaudioprocess = null;
+                audioProcessor = null;
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach((track) => track.stop());
+                mediaStream = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            resetUI();
+        }
+
+        function resetUI() {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+    </script>
+</body>
+</html>

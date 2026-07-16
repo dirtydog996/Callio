@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Callio — Mobile</title>
+    <link rel="stylesheet" href="/app/shared/client.css">
+</head>
+<body data-client-mode="mobile">
+    <div class="shell">
+        <main class="panel chat-panel">
+            <div class="chat-header">
+                <div>
+                    <span class="eyebrow">Callio Mobile</span>
+                    <h2>Mobile Workspace</h2>
+                    <p id="resumeLabel" class="helper-text">After scanning the QR code, use voice to continue collaborating.</p>
+                </div>
+                <div class="toolbar">
+                    <span id="statusPill" class="pill warning">Mobile ready</span>
+                    <button id="refreshBtn" type="button" class="ghost-btn mobile-only">Refresh</button>
+                    <button id="startBtn" type="button" class="primary-btn">Start Voice</button>
+                    <button id="stopBtn" type="button" class="danger-btn" disabled>Stop</button>
+                </div>
+            </div>
+            <div class="message-stream" id="messages">
+                <div class="message assistant">
+                    <small>Callio</small>
+                    <div>This is the mobile view: keep the voice conversation going, watch task status, and add manual tasks when needed.</div>
+                </div>
+            </div>
+            <div class="composer">
+                <div class="badge-row">
+                    <span id="statusHint" class="pill">Use HTTPS to access this page so microphone permission works.</span>
+                </div>
+                <div class="composer-grid">
+                    <input id="taskTitle" type="text" placeholder="Task title (optional)">
+                    <textarea id="taskInput" placeholder="Add a task to run in the background, e.g. &quot;Organize the current backlog and keep moving it forward.&quot;"></textarea>
+                </div>
+                <div class="toolbar">
+                    <button id="dispatchTaskBtn" type="button" class="primary-btn">Dispatch Task</button>
+                    <button id="confirmAllBtn" type="button" class="ghost-btn">Confirm All</button>
+                </div>
+            </div>
+        </main>
+        <aside class="panel task-panel">
+            <div>
+                <div class="section-title">Background Tasks</div>
+                <p class="helper-text">Confirmed, running, failed, and completed states are synchronized here in real time.</p>
+            </div>
+            <div id="tasks" class="task-list">
+                <p class="empty-state">Task updates appear here after voice starts or a task is dispatched.</p>
+            </div>
+            <div>
+                <div class="section-title">Live Call Report</div>
+                <div id="liveReport" class="report-list">
+                    <p class="empty-state">Live conversation text appears here after voice starts.</p>
+                </div>
+            </div>
+            <div>
+                <div class="section-title">Session History</div>
+                <div id="sessionList" class="session-list"></div>
+            </div>
+        </aside>
+    </div>
+    <script src="/app/shared/client.js"></script>
+</body>
+</html>

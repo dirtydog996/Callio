@@ -1,0 +1,62 @@
+# ===== 本地语音助手依赖 =====
+
+# 核心框架
+pipecat-ai>=1.2.1
+
+# Web 服务
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+websockets>=12.0
+
+# 语音合成 (TTS) — ChatTTS 对话向神经 TTS，未安装时自动回退 macOS say
+ChatTTS>=0.2.1
+torch>=2.1.0
+transformers>=4.41,<5  # ChatTTS 需要 LlamaModel；5.x 不兼容，安装后请用 venv/bin/python 启动
+requests>=2.31.0
+
+# 语音识别 (STT) - Whisper（默认）
+faster-whisper>=1.0.0
+
+# 本地 LLM - Ollama
+openai>=1.30.0  # OLLamaLLMService 使用 OpenAI 兼容接口
+
+# 二维码生成
+qrcode>=7.4.2
+pillow>=10.0.0
+
+# 环境变量
+python-dotenv>=1.0.0
+
+# 音频处理
+numpy>=1.26.0
+scipy>=1.12.0
+
+# 日志
+loguru>=0.7.0
+
+# 类型提示
+typing-extensions>=4.9.0
+
+# ===== 可选语音后端（按需安装） =====
+
+# EdgeTTS — 微软 Edge TTS（跨平台，快速，无需本地模型，需要联网）
+#   安装: pip install edge-tts
+#   启用: CALLIO_TTS_BACKEND=edge  CALLIO_EDGE_TTS_VOICE=zh-CN-XiaoxiaoNeural
+#   依赖: 需要系统安装 ffmpeg 用于 MP3→PCM 转换
+# edge-tts>=6.1.9
+
+# SenseVoice / FunASR — 阿里开源 ASR，中文识别准确率优于 Whisper
+#   安装: pip install funasr modelscope huggingface_hub
+#   启用: CALLIO_STT_BACKEND=sensevoice  CALLIO_FUNASR_MODEL=iic/SenseVoiceSmall
+# funasr>=1.1.0
+# modelscope>=1.14.0
+
+# CosyVoice — 高品质本地 TTS（需单独启动服务器）
+#   安装: git clone https://github.com/FunAudioLLM/CosyVoice && pip install -r requirements.txt
+#   启用: CALLIO_TTS_BACKEND=cosyvoice  CALLIO_COSYVOICE_URL=http://localhost:9880
+#   （无需在此 venv 安装，通过 REST API 对接）
+
+# Fish Speech — 高品质本地 TTS（需单独启动服务器）
+#   安装: pip install fish-speech  （在独立环境）
+#   启用: CALLIO_TTS_BACKEND=fish  CALLIO_FISH_SPEECH_URL=http://localhost:8080
+#   （无需在此 venv 安装，通过 REST API 对接）

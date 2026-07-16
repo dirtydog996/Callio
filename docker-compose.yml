@@ -1,0 +1,112 @@
+# docker-compose.yml — Callio 一键启动（API 服务 + Ollama）
+# 用法：
+#   cp .env.example .env       # 按需修改
+#   docker compose up -d       # 后台启动
+#   docker compose logs -f     # 查看日志
+#   docker compose down        # 停止并清理容器
+
+services:
+
+  # -------------------------------------------------------------------
+  # Callio API 服务
+  # -------------------------------------------------------------------
+  callio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: callio:latest
+    container_name: callio
+    restart: unless-stopped
+    ports:
+      - "${CALLIO_PORT:-8000}:8000"
+    environment:
+      CALLIO_HOST: "0.0.0.0"
+      CALLIO_PORT: "8000"
+      CALLIO_LLM_MODEL: "${CALLIO_LLM_MODEL:-qwen2.5:7b}"
+      CALLIO_LLM_PROVIDER: "${CALLIO_LLM_PROVIDER:-ollama}"
+      CALLIO_LLM_API_KEY: "${CALLIO_LLM_API_KEY:-}"
+      CALLIO_LLM_BASE_URL: "${CALLIO_LLM_BASE_URL:-}"
+      CALLIO_OLLAMA_BASE_URL: "http://ollama:11434/v1"
+      CALLIO_STT_BACKEND: "${CALLIO_STT_BACKEND:-whisper}"
+      CALLIO_WHISPER_MODEL: "${CALLIO_WHISPER_MODEL:-base}"
+      CALLIO_WHISPER_PRELOAD: "${CALLIO_WHISPER_PRELOAD:-1}"
+      CALLIO_TTS_BACKEND: "${CALLIO_TTS_BACKEND:-edge}"
+      CALLIO_EDGE_TTS_VOICE: "${CALLIO_EDGE_TTS_VOICE:-zh-CN-XiaoxiaoNeural}"
+      CALLIO_TTS_PRELOAD: "${CALLIO_TTS_PRELOAD:-0}"
+      CALLIO_HF_ENDPOINT: "${CALLIO_HF_ENDPOINT:-}"
+      CALLIO_AGENT_BACKEND: "${CALLIO_AGENT_BACKEND:-}"
+      CALLIO_AGENT_COMMAND: "${CALLIO_AGENT_COMMAND:-}"
+      CALLIO_SANDBOX_ROOT: "/workspace"
+      CALLIO_GLOBAL_MAX_PARALLEL: "${CALLIO_GLOBAL_MAX_PARALLEL:-3}"
+      CALLIO_TASK_TIMEOUT_SEC: "${CALLIO_TASK_TIMEOUT_SEC:-3600}"
+      CALLIO_EXECUTE_MAX_RETRIES: "${CALLIO_EXECUTE_MAX_RETRIES:-3}"
+      CALLIO_PROGRESS_INJECT: "${CALLIO_PROGRESS_INJECT:-1}"
+      CALLIO_MEMORY_INJECT: "${CALLIO_MEMORY_INJECT:-1}"
+    volumes:
+      # 工作区挂载（默认挂载当前目录，按需修改为你的项目路径）
+      - "${CALLIO_SANDBOX_ROOT:-.}:/workspace:rw"
+      # 持久化数据库与模型缓存
+      - callio_data:/app/data
+    depends_on:
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # -------------------------------------------------------------------
+  # 独立 Worker 进程（SQLite 任务队列消费者）
+  # -------------------------------------------------------------------
+  callio-worker:
+    image: callio:latest
+    container_name: callio-worker
+    restart: unless-stopped
+    command: ["python", "-m", "callio.worker"]
+    environment:
+      CALLIO_OLLAMA_BASE_URL: "http://ollama:11434/v1"
+      CALLIO_LLM_MODEL: "${CALLIO_LLM_MODEL:-qwen2.5:7b}"
+      CALLIO_LLM_PROVIDER: "${CALLIO_LLM_PROVIDER:-ollama}"
+      CALLIO_LLM_API_KEY: "${CALLIO_LLM_API_KEY:-}"
+      CALLIO_LLM_BASE_URL: "${CALLIO_LLM_BASE_URL:-}"
+      CALLIO_AGENT_BACKEND: "${CALLIO_AGENT_BACKEND:-}"
+      CALLIO_AGENT_COMMAND: "${CALLIO_AGENT_COMMAND:-}"
+      CALLIO_SANDBOX_ROOT: "/workspace"
+      CALLIO_GLOBAL_MAX_PARALLEL: "${CALLIO_GLOBAL_MAX_PARALLEL:-3}"
+      CALLIO_TASK_TIMEOUT_SEC: "${CALLIO_TASK_TIMEOUT_SEC:-3600}"
+      CALLIO_EXECUTE_MAX_RETRIES: "${CALLIO_EXECUTE_MAX_RETRIES:-3}"
+    volumes:
+      - "${CALLIO_SANDBOX_ROOT:-.}:/workspace:rw"
+      - callio_data:/app/data
+    depends_on:
+      callio:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------
+  # Ollama（本地 LLM 推理）
+  # 首次启动后执行: docker exec ollama ollama pull qwen2.5:7b
+  # -------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    # GPU 加速（取消注释以使用 NVIDIA GPU）
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  callio_data:
+    driver: local
+  ollama_models:
+    driver: local

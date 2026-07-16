@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+from typing import Any
+
+from callio.config.settings import Settings
+from callio.core.database import Database
+
+
+class ProgressSnapshot:
+    def __init__(self, database: Database, settings: Settings) -> None:
+        self.database = database
+        self.settings = settings
+
+    def snapshot(self, session_id: str) -> dict[str, Any]:
+        nodes = self.database.list_spec_nodes(session_id=session_id)
+        runs = self.database.list_task_runs(session_id=session_id, limit=5)
+        session = self.database.get_session(session_id)
+
+        by_status: dict[str, int] = {}
+        proposed: list[dict[str, str]] = []
+        active: list[dict[str, str]] = []
+        done: list[dict[str, str]] = []
+
+        for node in nodes:
+            status = str(node.get("status") or "")
+            phase = str(node.get("phase") or "")
+            by_status[status] = by_status.get(status, 0) + 1
+            item = {
+                "node_id": str(node.get("node_id")),
+                "title": str(node.get("feature_name")),
+                "kind": str(node.get("kind")),
+                "status": status,
+                "phase": phase,
+                "result_summary": str(node.get("result_summary") or ""),
+            }
+            if phase == "PROPOSED":
+                proposed.append(item)
+            elif status == "RUNNING":
+                active.append(item)
+            elif status in {"SUCCESS", "FAILED", "CANCELLED"}:
+                done.append(item)
+
+        last_log = ""
+        if runs:
+            last_log = str(runs[0].get("stdout_tail") or "")[-300:]
+
+        return {
+            "session_id": session_id,
+            "summary": (session or {}).get("summary"),
+            "action_plan": (session or {}).get("action_plan"),
+            "proposed": proposed,
+            "active": active,
+            "done": done[:5],
+            "counts": by_status,
+            "last_log": last_log,
+        }
+
+    def build_context_block(self, session_id: str, *, announced: set[str] | None = None) -> str:
+        """Build a system-prompt context block describing background task status.
+
+        ``announced`` is an optional set of node_ids whose results have already
+        been reported to the user.  Newly-completed tasks with results that are
+        NOT in ``announced`` will receive a prominent proactive annotation so the
+        LLM knows to mention them at the next natural opportunity.
+        """
+        if not self.settings.progress_inject:
+            return ""
+        snap = self.snapshot(session_id)
+        parts: list[str] = []
+        if snap.get("summary"):
+            parts.append(f"Summary: {snap['summary']}")
+        if snap.get("action_plan"):
+            parts.append(f"Plan: {snap['action_plan']}")
+        if snap.get("proposed"):
+            titles = ", ".join(f"{t['title']}(pending)" for t in snap["proposed"][:3])
+            parts.append(f"Pending: {titles}")
+        if snap.get("active"):
+            titles = ", ".join(f"{t['title']}({t['status']})" for t in snap["active"][:3])
+            parts.append(f"Active: {titles}")
+        if snap.get("done"):
+            titles = ", ".join(f"{t['title']}({t['status']})" for t in snap["done"][:3])
+            parts.append(f"Done: {titles}")
+        if snap.get("last_log"):
+            parts.append(f"Recent log: {snap['last_log'][:120]}")
+        if not parts:
+            return ""
+        block = "[Background Task Status] " + " | ".join(parts)
+
+        # Append proactive notification for tasks that just completed with results
+        # and have not yet been announced to the user.
+        if announced is not None:
+            fresh = self.database.list_completed_with_results(session_id)
+            new_results = [t for t in fresh if str(t["node_id"]) not in announced]
+            if new_results:
+                lines = [
+                    f'"{t["feature_name"]}": {t["result_summary"]}'
+                    for t in new_results[:3]
+                ]
+                block += (
+                    "\n[PROACTIVE ACTION REQUIRED] The following background task(s) just finished."
+                    " Briefly tell the user the result in your next spoken reply before answering"
+                    " any other question: " + " | ".join(lines)
+                )
+
+        return block
