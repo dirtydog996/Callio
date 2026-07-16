@@ -1,12 +1,33 @@
 (function () {
     const TARGET_SAMPLE_RATE = 16000;
     const mode = document.body.dataset.clientMode || "web";
+    const LAST_SESSION_STORAGE_KEY = "callio.lastSessionId";
+
+    function loadStoredSessionId() {
+        try {
+            return localStorage.getItem(LAST_SESSION_STORAGE_KEY) || null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function storeSessionId(sessionId) {
+        try {
+            if (sessionId) {
+                localStorage.setItem(LAST_SESSION_STORAGE_KEY, sessionId);
+            } else {
+                localStorage.removeItem(LAST_SESSION_STORAGE_KEY);
+            }
+        } catch (_) {
+            // Ignore storage failures (private mode / restricted envs).
+        }
+    }
 
     const state = {
         ws: null,
         statusWs: null,
         sessionId: null,
-        selectedSessionId: null,
+        selectedSessionId: loadStoredSessionId(),
         audioContext: null,
         mediaStream: null,
         audioProcessor: null,
@@ -295,6 +316,22 @@
         return `${title} · ${ended}`;
     }
 
+    function updateResumeLabel() {
+        if (!elements.resumeLabel) return;
+        if (!state.selectedSessionId) {
+            elements.resumeLabel.textContent = "Current target session: Auto new session";
+            return;
+        }
+        const shortId = state.selectedSessionId.slice(0, 8);
+        elements.resumeLabel.textContent = `Current target session: ${shortId}`;
+    }
+
+    function setSelectedSession(sessionId) {
+        state.selectedSessionId = sessionId || null;
+        storeSessionId(state.selectedSessionId);
+        updateResumeLabel();
+    }
+
     async function requestJson(path, options) {
         const url = new URL(path, window.location.origin);
         if (url.origin !== window.location.origin || !url.pathname.startsWith("/api/v1/")) {
@@ -308,6 +345,9 @@
     }
 
     function renderSessions(items) {
+        if (state.selectedSessionId && !items.some((s) => s.session_id === state.selectedSessionId)) {
+            setSelectedSession(null);
+        }
         elements.sessions.innerHTML = "";
         if (!items.length) {
             const empty = document.createElement("p");
@@ -331,7 +371,7 @@
             meta.textContent = formatSessionLabel(session);
             button.append(title, meta);
             button.onclick = async () => {
-                state.selectedSessionId = session.session_id;
+                setSelectedSession(session.session_id);
                 renderSessions(items);
                 await preloadResumeSession(session.session_id);
                 await refreshSessionTasks(session.session_id);
@@ -704,6 +744,7 @@
             if (data.type === "session") {
                 resetAssistantDraft();
                 state.sessionId = data.session_id;
+                setSelectedSession(data.session_id);
                 if (data.resumed) {
                     setStatus("success", "Resuming session", data.title || state.sessionId.slice(0, 8));
                 } else {
@@ -874,6 +915,7 @@
     loadSessionOptions();
     refreshSessionTasks();
     resetLiveReport();
+    updateResumeLabel();
 
     if (mode === "mobile") {
         setStatus("warning", "Mobile ready", "Use HTTPS to enable microphone access.");

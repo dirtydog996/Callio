@@ -175,10 +175,9 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
         backend = (settings.stt_backend or "whisper").strip().lower()
         if backend == "sensevoice":
             from callio.voice.funasr_loader import wait_for_funasr
-            await wait_for_funasr(settings)
+            await asyncio.gather(wait_for_funasr(settings), wait_for_tts(settings))
         else:
-            await wait_for_whisper(settings)
-        await wait_for_tts(settings)
+            await asyncio.gather(wait_for_whisper(settings), wait_for_tts(settings))
 
         if orchestrator is not None:
             resume_session_id = websocket.query_params.get("resume_session_id")
@@ -196,7 +195,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 transcript = str(session_row.get("transcript", ""))
                 if transcript:
                     orchestrator.transcripts.hydrate(session_id, transcript)
-                    history_messages = parse_transcript_messages(transcript)
+                    history_messages = parse_transcript_messages(transcript, max_turns=16)
                 resume_block = build_resume_block(orchestrator.database, session_id)
             await websocket.send_json({
                 "type": "session",
