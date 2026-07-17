@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.request import urlopen
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import RedirectResponse
@@ -87,6 +89,25 @@ def _settings_missing_keys(settings_map: dict[str, str]) -> list[str]:
         if not settings_map.get("CALLIO_LLM_API_KEY", "").strip():
             missing.append("CALLIO_LLM_API_KEY")
     return missing
+
+
+def _ollama_tags_url(base_url: str) -> str:
+    normalized = (base_url or "http://localhost:11434/v1").strip().rstrip("/")
+    if normalized.endswith("/v1"):
+        normalized = normalized[:-3]
+    return f"{normalized}/api/tags"
+
+
+def _fetch_ollama_models(base_url: str) -> tuple[list[str], str | None]:
+    url = _ollama_tags_url(base_url)
+    try:
+        with urlopen(url, timeout=2.5) as response:  # nosec B310 - user-configured local/service URL
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        return [], str(exc)
+    models = payload.get("models", []) if isinstance(payload, dict) else []
+    names = sorted({str(item.get("name", "")).strip() for item in models if isinstance(item, dict) and item.get("name")})
+    return names, None
 
 
 class TodoItem(BaseModel):
@@ -231,6 +252,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "configured": not missing,
             "missing": missing,
             "restart_required": True,
+        }
+
+    @app.get("/api/v1/settings/ollama-models")
+    async def list_ollama_models(base_url: str = "") -> dict[str, Any]:
+        effective_base = (base_url or "http://localhost:11434/v1").strip()
+        models, error = _fetch_ollama_models(effective_base)
+        return {
+            "base_url": effective_base,
+            "models": models,
+            "error": error,
+            "reachable": error is None,
         }
 
     @app.get("/api/v1/tasks")

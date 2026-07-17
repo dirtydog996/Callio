@@ -43,7 +43,7 @@ body[data-client-mode="web"] {
     align-items: center;
     gap: 12px;
     padding: 10px 18px;
-    background: rgba(2, 6, 23, 0.82);
+    background: linear-gradient(90deg, rgba(2, 6, 23, 0.92), rgba(30, 41, 59, 0.82));
     border-bottom: 1px solid rgba(148, 163, 184, 0.18);
     backdrop-filter: blur(12px);
 }
@@ -203,8 +203,8 @@ a {
     padding: 14px 16px;
     border-radius: 16px;
     border: 1px solid rgba(251, 191, 36, 0.32);
-    background: rgba(251, 191, 36, 0.09);
-    color: #fef3c7;
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.14), rgba(245, 158, 11, 0.08));
+    color: #fffbeb;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -213,7 +213,7 @@ a {
 
 .setup-gate p {
     margin: 0;
-    color: #fde68a;
+    color: #fef3c7;
     font-size: 13px;
 }
 
@@ -611,12 +611,16 @@ button:active:not(:disabled) { transform: scale(0.97); }
     inset: 0;
     background: rgba(2, 6, 23, 0.78);
     backdrop-filter: blur(10px);
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     z-index: 1000;
     padding: 20px;
     animation: fade-in 0.2s ease;
+}
+
+.modal-overlay.is-open {
+    display: flex;
 }
 
 .modal {
@@ -642,6 +646,17 @@ button:active:not(:disabled) { transform: scale(0.97); }
     gap: 12px;
 }
 
+.inline-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.inline-btn {
+    padding: 10px 12px;
+    white-space: nowrap;
+}
+
 .settings-grid label {
     display: flex;
     flex-direction: column;
@@ -658,6 +673,22 @@ button:active:not(:disabled) { transform: scale(0.97); }
     background: rgba(15, 23, 42, 0.82);
     color: var(--text);
     padding: 10px 12px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settings-grid input:focus,
+.settings-grid select:focus {
+    outline: none;
+    border-color: rgba(96, 165, 250, 0.6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+#ollamaModelGroup {
+    grid-column: span 2;
+}
+
+#settingOllamaModelSelect {
+    flex: 1;
 }
 
 .modal-header {
@@ -779,4 +810,6 @@ button:active:not(:disabled) { transform: scale(0.97); }
     .modal-title { font-size: 17px; }
     .toast-container { right: 16px; bottom: 16px; left: 16px; max-width: 100%; }
     .settings-grid { grid-template-columns: 1fr; }
+    #ollamaModelGroup { grid-column: span 1; }
+    .inline-row { flex-direction: column; align-items: stretch; }
 }

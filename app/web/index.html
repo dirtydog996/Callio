@@ -13,10 +13,10 @@
             <strong>Voice Workspace</strong>
         </div>
         <nav class="topbar-nav" aria-label="Quick Navigation">
-            <button type="button" class="ghost-btn" data-nav-target="sessionList">会话</button>
-            <button type="button" class="ghost-btn" data-nav-target="messages">对话</button>
-            <button type="button" class="ghost-btn" data-nav-target="tasks">任务</button>
-            <button id="openSettingsBtn" type="button" class="primary-btn">设置向导</button>
+            <button type="button" class="ghost-btn" data-nav-target="sessionList">Sessions</button>
+            <button type="button" class="ghost-btn" data-nav-target="messages">Chat</button>
+            <button type="button" class="ghost-btn" data-nav-target="tasks">Tasks</button>
+            <button id="openSettingsBtn" type="button" class="primary-btn">Settings Wizard</button>
         </nav>
     </header>
     <div class="shell">
@@ -55,9 +55,9 @@
                 </div>
             </div>
             <div id="setupGate" class="setup-gate">
-                <strong>请先完成设置向导</strong>
-                <p>先配置 LLM / Ollama 模型等运行参数，保存后即可开始对话。</p>
-                <button id="openSettingsInlineBtn" type="button" class="primary-btn">打开设置</button>
+                <strong>Complete setup before starting chat</strong>
+                <p>Configure LLM and runtime options first, then save to unlock voice chat.</p>
+                <button id="openSettingsInlineBtn" type="button" class="primary-btn">Open Settings</button>
             </div>
             <div class="message-stream" id="messages">
                 <div class="message assistant">
@@ -108,10 +108,10 @@
     <div id="settingsModal" class="modal-overlay" hidden>
         <div class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
             <div class="modal-header">
-                <h2 id="settingsTitle" class="modal-title">设置向导</h2>
-                <button id="closeSettingsBtn" type="button" class="ghost-btn">关闭</button>
+                <h2 id="settingsTitle" class="modal-title">Settings Wizard</h2>
+                <button id="closeSettingsBtn" type="button" class="ghost-btn">Close</button>
             </div>
-            <div class="modal-meta">保存后会写入服务端 `.env`。已保存即可开始对话，建议重启服务使配置完全生效。</div>
+            <div class="modal-meta">Settings are written to the server .env file. Save and restart the service to fully apply provider-level changes.</div>
             <div class="settings-grid">
                 <label>LLM Provider
                     <select id="settingLlmProvider">
@@ -125,11 +125,19 @@
                 <label>LLM Model
                     <input id="settingLlmModel" type="text" placeholder="qwen2.5:7b">
                 </label>
+                <label id="ollamaModelGroup">Ollama Installed Models
+                    <div class="inline-row">
+                        <select id="settingOllamaModelSelect">
+                            <option value="">Loading models...</option>
+                        </select>
+                        <button id="refreshOllamaModelsBtn" type="button" class="ghost-btn inline-btn">Refresh</button>
+                    </div>
+                </label>
                 <label>LLM API Key
-                    <input id="settingLlmApiKey" type="password" placeholder="可留空（若服务环境变量已提供）">
+                    <input id="settingLlmApiKey" type="password" placeholder="Optional if already provided in server env">
                 </label>
                 <label>LLM Base URL
-                    <input id="settingLlmBaseUrl" type="text" placeholder="openai_compatible 常用">
+                    <input id="settingLlmBaseUrl" type="text" placeholder="Common for openai_compatible provider">
                 </label>
                 <label>Ollama Base URL
                     <input id="settingOllamaBaseUrl" type="text" placeholder="http://localhost:11434/v1">
@@ -157,7 +165,7 @@
                 </label>
             </div>
             <div class="modal-footer">
-                <button id="saveSettingsBtn" type="button" class="primary-btn">保存并开始对话</button>
+                <button id="saveSettingsBtn" type="button" class="primary-btn">Save and Unlock Chat</button>
             </div>
         </div>
     </div>

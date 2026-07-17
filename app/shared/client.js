@@ -58,6 +58,7 @@
             at: 0,
         },
         settingsReady: loadStoredSettingsReady(),
+        ollamaModels: [],
     };
 
     const elements = {
@@ -90,6 +91,9 @@
         settingTtsBackend: document.getElementById("settingTtsBackend"),
         settingHost: document.getElementById("settingHost"),
         settingPort: document.getElementById("settingPort"),
+        settingOllamaModelSelect: document.getElementById("settingOllamaModelSelect"),
+        refreshOllamaModelsBtn: document.getElementById("refreshOllamaModelsBtn"),
+        ollamaModelGroup: document.getElementById("ollamaModelGroup"),
     };
 
     // ---- Toast notification system ----
@@ -266,12 +270,66 @@
 
     function openSettingsModal() {
         if (!elements.settingsModal) return;
+        elements.settingsModal.classList.add("is-open");
+        elements.settingsModal.removeAttribute("hidden");
         elements.settingsModal.hidden = false;
     }
 
     function closeSettingsModal() {
         if (!elements.settingsModal) return;
+        elements.settingsModal.classList.remove("is-open");
+        elements.settingsModal.setAttribute("hidden", "hidden");
         elements.settingsModal.hidden = true;
+    }
+
+    function applyProviderSpecificUI() {
+        const provider = elements.settingLlmProvider?.value || "ollama";
+        if (!elements.ollamaModelGroup) return;
+        const showOllama = provider === "ollama";
+        elements.ollamaModelGroup.hidden = !showOllama;
+    }
+
+    function fillOllamaModelSelect(models, selectedModel) {
+        if (!elements.settingOllamaModelSelect) return;
+        const normalized = Array.isArray(models) ? models : [];
+        elements.settingOllamaModelSelect.innerHTML = "";
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = normalized.length ? "Select an installed model" : "No installed model found";
+        elements.settingOllamaModelSelect.appendChild(defaultOption);
+
+        normalized.forEach((name) => {
+            const option = document.createElement("option");
+            option.value = name;
+            option.textContent = name;
+            elements.settingOllamaModelSelect.appendChild(option);
+        });
+
+        if (selectedModel && normalized.includes(selectedModel)) {
+            elements.settingOllamaModelSelect.value = selectedModel;
+        } else {
+            elements.settingOllamaModelSelect.value = "";
+        }
+    }
+
+    async function loadOllamaModels() {
+        if (mode !== "web" || !elements.settingOllamaModelSelect) return;
+        const provider = elements.settingLlmProvider?.value || "ollama";
+        if (provider !== "ollama") return;
+
+        const baseUrl = encodeURIComponent(elements.settingOllamaBaseUrl?.value.trim() || "");
+        elements.settingOllamaModelSelect.innerHTML = '<option value="">Loading models...</option>';
+        try {
+            const data = await requestJson(`/api/v1/settings/ollama-models?base_url=${baseUrl}`);
+            state.ollamaModels = data.models || [];
+            fillOllamaModelSelect(state.ollamaModels, elements.settingLlmModel?.value.trim() || "");
+            if (!state.ollamaModels.length && data.error) {
+                showToast(`Ollama model scan failed: ${data.error}`, "warning", 5000);
+            }
+        } catch (error) {
+            fillOllamaModelSelect([], "");
+            showToast(`Failed to load Ollama models: ${error.message}`, "warning", 5000);
+        }
     }
 
     function collectSettingsPayload() {
@@ -299,6 +357,7 @@
         if (elements.settingTtsBackend) elements.settingTtsBackend.value = data.CALLIO_TTS_BACKEND || "chatt";
         if (elements.settingHost) elements.settingHost.value = data.CALLIO_HOST || "0.0.0.0";
         if (elements.settingPort) elements.settingPort.value = data.CALLIO_PORT || "8000";
+        applyProviderSpecificUI();
     }
 
     function normalizeDisplayText(value) {
@@ -435,6 +494,7 @@
             state.settingsReady = Boolean(data.configured);
             storeSettingsReady(state.settingsReady);
             applySettingsReadyUI();
+            await loadOllamaModels();
         } catch (error) {
             console.warn("Failed to load setup settings", error);
             state.settingsReady = loadStoredSettingsReady();
@@ -1030,9 +1090,30 @@
 
     function bindSettingsWizard() {
         if (mode !== "web") return;
+        elements.settingLlmProvider?.addEventListener("change", async () => {
+            applyProviderSpecificUI();
+            await loadOllamaModels();
+        });
+        elements.settingOllamaBaseUrl?.addEventListener("change", async () => {
+            await loadOllamaModels();
+        });
+        elements.settingOllamaModelSelect?.addEventListener("change", () => {
+            const value = elements.settingOllamaModelSelect.value || "";
+            if (value && elements.settingLlmModel) {
+                elements.settingLlmModel.value = value;
+            }
+        });
+        elements.refreshOllamaModelsBtn?.addEventListener("click", async () => {
+            await loadOllamaModels();
+        });
         elements.openSettingsBtn?.addEventListener("click", openSettingsModal);
         elements.openSettingsInlineBtn?.addEventListener("click", openSettingsModal);
         elements.closeSettingsBtn?.addEventListener("click", closeSettingsModal);
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && elements.settingsModal && !elements.settingsModal.hidden) {
+                closeSettingsModal();
+            }
+        });
         elements.settingsModal?.addEventListener("click", (event) => {
             if (event.target === elements.settingsModal) {
                 closeSettingsModal();
