@@ -110,6 +110,23 @@ def _fetch_ollama_models(base_url: str) -> tuple[list[str], str | None]:
     return names, None
 
 
+def _ollama_error_hint(base_url: str, error: str | None) -> str:
+    if not error:
+        return ""
+    normalized = (base_url or "").strip().lower()
+    if "localhost" in normalized or "127.0.0.1" in normalized:
+        return (
+            "This app is running inside a container or remote workspace. "
+            "In that environment, localhost points to the container itself, not your local machine. "
+            "If Ollama is running on your computer, use a host-reachable address or rely on browser-side local detection."
+        )
+    if "connection refused" in error.lower():
+        return "The target address was reached, but nothing is listening on port 11434. Start Ollama or verify the port."
+    if "timed out" in error.lower():
+        return "The address did not respond in time. Check firewall rules, routing, or whether the host is reachable from this environment."
+    return "Verify the base URL and confirm that the Ollama API is reachable from the current runtime environment."
+
+
 class TodoItem(BaseModel):
     node_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str | None = None
@@ -262,6 +279,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "base_url": effective_base,
             "models": models,
             "error": error,
+            "hint": _ollama_error_hint(effective_base, error),
             "reachable": error is None,
         }
 

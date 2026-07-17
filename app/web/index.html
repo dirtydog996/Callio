@@ -133,25 +133,25 @@
                         <div id="ollamaModelGroup" class="settings-field field-span-2">
                             <span class="field-label">Installed Ollama Models</span>
                             <div class="inline-row">
-                                <select id="settingOllamaModelSelect">
-                                    <option value="">Loading models...</option>
-                                </select>
+                                <input id="settingOllamaModelSearch" type="text" list="ollamaModelOptions" placeholder="Search or type an installed model">
+                                <datalist id="ollamaModelOptions"></datalist>
                                 <button id="refreshOllamaModelsBtn" type="button" class="ghost-btn inline-btn">Refresh</button>
                             </div>
                             <div id="ollamaStatus" class="field-note">Checking Ollama service status...</div>
                         </div>
-                        <label class="settings-field">
+                        <label class="settings-field" data-provider-scope="remote-auth openai anthropic gemini openai_compatible">
                             <span class="field-label">LLM API Key</span>
                             <input id="settingLlmApiKey" type="password" placeholder="Optional if already provided in server env">
                         </label>
-                        <label class="settings-field">
+                        <label class="settings-field" data-provider-scope="openai_compatible">
                             <span class="field-label">LLM Base URL</span>
                             <input id="settingLlmBaseUrl" type="text" placeholder="Common for openai_compatible provider">
                         </label>
-                        <label class="settings-field field-span-2">
+                        <label class="settings-field field-span-2" data-provider-scope="ollama">
                             <span class="field-label">Ollama Base URL</span>
                             <input id="settingOllamaBaseUrl" type="text" placeholder="http://localhost:11434/v1">
                         </label>
+                        <div id="providerHint" class="field-note field-span-2">Provider-specific fields update automatically when you switch providers.</div>
                     </div>
                 </section>
 
@@ -187,6 +187,7 @@
                 </section>
             </div>
             <div class="modal-footer">
+                <div id="saveSettingsStatus" class="field-note modal-status">Ready to save changes.</div>
                 <button id="saveSettingsBtn" type="button" class="primary-btn">Save and Unlock Chat</button>
             </div>
         </div>

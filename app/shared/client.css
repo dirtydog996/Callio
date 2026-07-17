@@ -691,6 +691,11 @@ button:active:not(:disabled) { transform: scale(0.97); }
     min-width: 0;
 }
 
+.settings-field[hidden],
+[data-provider-scope][hidden] {
+    display: none !important;
+}
+
 .field-span-2 {
     grid-column: span 2;
 }
@@ -712,6 +717,12 @@ button:active:not(:disabled) { transform: scale(0.97); }
     color: var(--muted);
     background: rgba(15, 23, 42, 0.55);
     border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.field-note.info {
+    color: #dbeafe;
+    border-color: rgba(96, 165, 250, 0.3);
+    background: rgba(30, 64, 175, 0.16);
 }
 
 .field-note.success {
@@ -750,9 +761,42 @@ button:active:not(:disabled) { transform: scale(0.97); }
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
-#settingOllamaModelSelect {
+#settingOllamaModelSearch {
     flex: 1;
     min-width: 0;
+}
+
+.modal-status {
+    margin: 0;
+    flex: 1;
+}
+
+.modal-footer {
+    align-items: center;
+}
+
+.primary-btn.is-loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.82;
+}
+
+.primary-btn.is-loading::after {
+    content: "";
+    width: 14px;
+    height: 14px;
+    margin-left: 10px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.34);
+    border-top-color: white;
+    display: inline-block;
+    vertical-align: -2px;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .modal-header {
