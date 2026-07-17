@@ -108,6 +108,18 @@ a {
     color: var(--muted);
 }
 
+.section-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.subtle-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
 .brand h1 {
     margin: 0;
     font-size: 28px;
@@ -316,6 +328,12 @@ button:disabled {
     align-self: flex-start;
     background: rgba(15, 23, 42, 0.88);
     border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.message.error {
+    align-self: flex-start;
+    background: rgba(127, 29, 29, 0.22);
+    border: 1px solid rgba(251, 113, 133, 0.32);
 }
 
 .message small {

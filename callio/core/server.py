@@ -300,6 +300,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def list_sessions() -> dict[str, Any]:
         return {"items": database.list_sessions()}
 
+    @app.delete("/api/v1/sessions")
+    async def clear_sessions() -> dict[str, Any]:
+        cleared = database.clear_all_sessions()
+        memory_hub.clear_all_session_memory()
+        await manager.broadcast_status({
+            "event": "SESSIONS_CLEARED",
+            "counts": cleared,
+        })
+        return {
+            "status": "cleared",
+            "counts": cleared,
+        }
+
     @app.get("/api/v1/tasks/{node_id}/runs")
     async def get_task_runs(node_id: str) -> dict[str, Any]:
         node = database.get_spec_node(node_id)

@@ -22,6 +22,30 @@ from callio.voice.web_tts import create_tts
 from callio.voice.whisper_loader import create_whisper_stt, preload_whisper, wait_for_whisper
 
 
+def _summarize_voice_error(message: str) -> tuple[str, str]:
+    text = (message or "").strip()
+    lower = text.lower()
+    if "does not support tools" in lower:
+        return (
+            "Model does not support tool calling",
+            "The selected Ollama model cannot use background task tools. Choose a tools-capable model or disable task-oriented voice workflows.",
+        )
+    if "not found" in lower and "model" in lower:
+        return (
+            "Model not found",
+            "The selected model is not installed in Ollama. Pick a model from the installed list or pull it first.",
+        )
+    if "connection refused" in lower or "timed out" in lower:
+        return (
+            "LLM service unreachable",
+            "Callio could not reach the configured LLM service. Check whether Ollama or the provider endpoint is running and reachable.",
+        )
+    return (
+        "Voice request failed",
+        "The model request failed. Review the selected provider, model, and runtime availability, then try again.",
+    )
+
+
 def _create_stt(settings: Settings):
     """Return the appropriate STT service based on *stt_backend* setting."""
     backend = (settings.stt_backend or "whisper").strip().lower()
@@ -87,6 +111,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             from pipecat.audio.vad.silero import SileroVADAnalyzer
             from pipecat.audio.vad.vad_analyzer import VADParams
             from pipecat.frames.frames import (
+                ErrorFrame,
                 Frame,
                 InputAudioRawFrame,
                 InterruptionFrame,
@@ -164,6 +189,17 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 try:
                     if isinstance(frame, InterruptionFrame):
                         await self._websocket.send_text(json.dumps({"type": "interrupt"}))
+                    elif self._role == "assistant" and isinstance(frame, ErrorFrame):
+                        detail = getattr(frame, "error", "") or str(frame)
+                        title, summary = _summarize_voice_error(detail)
+                        await self._websocket.send_text(
+                            json.dumps({
+                                "type": "error",
+                                "title": title,
+                                "text": summary,
+                                "detail": detail,
+                            }, ensure_ascii=False)
+                        )
                     elif self._role == "user" and isinstance(frame, TranscriptionFrame) and frame.text:
                         await self._websocket.send_text(
                             json.dumps({"type": "transcription", "text": frame.text}, ensure_ascii=False)

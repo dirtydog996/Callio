@@ -68,6 +68,7 @@
         tasks: document.getElementById("tasks"),
         liveReport: document.getElementById("liveReport"),
         sessions: document.getElementById("sessionList"),
+        clearSessionsBtn: document.getElementById("clearSessionsBtn"),
         startBtn: document.getElementById("startBtn"),
         stopBtn: document.getElementById("stopBtn"),
         refreshBtn: document.getElementById("refreshBtn"),
@@ -504,6 +505,16 @@
         addLiveReport(role, normalizedText, label, { stream });
     }
 
+    function presentVoiceError(payload) {
+        const title = payload && payload.title ? payload.title : "Voice issue";
+        const text = payload && payload.text ? payload.text : "The voice request failed.";
+        resetAssistantDraft();
+        stopDownlinkPlayback();
+        addMessage("error", `${title}\n${text}`, "Voice Issue");
+        setStatus("danger", title, text);
+        showToast(title, "danger", 5000);
+    }
+
     function resetMessages() {
         elements.messages.innerHTML = "";
         resetAssistantDraft();
@@ -663,6 +674,25 @@
         } catch (error) {
             console.warn("Failed to load sessions", error);
         }
+    }
+
+    async function clearAllSessions() {
+        if (state.isRecording) {
+            showToast("Stop the current voice session before clearing history.", "warning", 4500);
+            return;
+        }
+        if (!window.confirm("Clear all saved conversations and related task history?")) {
+            return;
+        }
+        const data = await requestJson("/api/v1/sessions", { method: "DELETE" });
+        setSelectedSession(null);
+        resetMessages();
+        resetLiveReport();
+        state.taskNodes.clear();
+        elements.tasks.innerHTML = "<p class='empty-state'>Background tasks and status updates appear here after you start a conversation.</p>";
+        await loadSessionOptions();
+        setStatus("success", "History cleared", "Saved conversations and task history were removed.");
+        showToast(`Cleared ${data.counts?.sessions || 0} conversation${(data.counts?.sessions || 0) === 1 ? "" : "s"}.`, "success", 4000);
     }
 
     function renderStoredTranscript(transcript) {
@@ -1033,6 +1063,8 @@
                 addMessage("user", data.text);
             } else if (data.type === "assistant") {
                 addMessage("assistant", data.text, undefined, { stream: true });
+            } else if (data.type === "error") {
+                presentVoiceError(data);
             } else if (data.type === "interrupt") {
                 resetAssistantDraft();
                 stopDownlinkPlayback();
@@ -1243,6 +1275,13 @@
     });
     elements.confirmAllBtn.addEventListener("click", async () => {
         await postTaskAction("confirm", [], true);
+    });
+    elements.clearSessionsBtn?.addEventListener("click", async () => {
+        try {
+            await clearAllSessions();
+        } catch (error) {
+            showToast(`Clear history failed: ${error.message}`, "danger", 5000);
+        }
     });
     elements.dispatchTaskBtn.addEventListener("click", async () => {
         try {
