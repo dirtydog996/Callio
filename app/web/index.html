@@ -7,8 +7,20 @@
     <link rel="stylesheet" href="/app/shared/client.css">
 </head>
 <body data-client-mode="web">
+    <header class="topbar">
+        <div class="topbar-brand">
+            <span class="eyebrow">Callio</span>
+            <strong>Voice Workspace</strong>
+        </div>
+        <nav class="topbar-nav" aria-label="Quick Navigation">
+            <button type="button" class="ghost-btn" data-nav-target="sessionList">会话</button>
+            <button type="button" class="ghost-btn" data-nav-target="messages">对话</button>
+            <button type="button" class="ghost-btn" data-nav-target="tasks">任务</button>
+            <button id="openSettingsBtn" type="button" class="primary-btn">设置向导</button>
+        </nav>
+    </header>
     <div class="shell">
-        <aside class="panel sidebar">
+        <aside class="panel sidebar" id="sessionsPanel">
             <div class="brand">
                 <span class="eyebrow">Callio</span>
                 <h1>Copilot-style Workspace</h1>
@@ -28,7 +40,7 @@
             </div>
         </aside>
 
-        <main class="panel chat-panel">
+        <main class="panel chat-panel" id="chatPanel">
             <div class="chat-header">
                 <div>
                     <span class="eyebrow">Voice + Tasks</span>
@@ -41,6 +53,11 @@
                     <button id="startBtn" type="button" class="primary-btn">Start</button>
                     <button id="stopBtn" type="button" class="danger-btn" disabled>Stop</button>
                 </div>
+            </div>
+            <div id="setupGate" class="setup-gate">
+                <strong>请先完成设置向导</strong>
+                <p>先配置 LLM / Ollama 模型等运行参数，保存后即可开始对话。</p>
+                <button id="openSettingsInlineBtn" type="button" class="primary-btn">打开设置</button>
             </div>
             <div class="message-stream" id="messages">
                 <div class="message assistant">
@@ -63,7 +80,7 @@
             </div>
         </main>
 
-        <aside class="panel task-panel">
+        <aside class="panel task-panel" id="tasksPanel">
             <div>
                 <div class="section-title">Background Tasks</div>
                 <p class="helper-text">Proposals, confirmations, execution, and stops are all shown here for parallel collaboration during a call.</p>
@@ -86,6 +103,63 @@
                 </ul>
             </div>
         </aside>
+    </div>
+
+    <div id="settingsModal" class="modal-overlay" hidden>
+        <div class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+            <div class="modal-header">
+                <h2 id="settingsTitle" class="modal-title">设置向导</h2>
+                <button id="closeSettingsBtn" type="button" class="ghost-btn">关闭</button>
+            </div>
+            <div class="modal-meta">保存后会写入服务端 `.env`。已保存即可开始对话，建议重启服务使配置完全生效。</div>
+            <div class="settings-grid">
+                <label>LLM Provider
+                    <select id="settingLlmProvider">
+                        <option value="ollama">ollama</option>
+                        <option value="openai">openai</option>
+                        <option value="anthropic">anthropic</option>
+                        <option value="gemini">gemini</option>
+                        <option value="openai_compatible">openai_compatible</option>
+                    </select>
+                </label>
+                <label>LLM Model
+                    <input id="settingLlmModel" type="text" placeholder="qwen2.5:7b">
+                </label>
+                <label>LLM API Key
+                    <input id="settingLlmApiKey" type="password" placeholder="可留空（若服务环境变量已提供）">
+                </label>
+                <label>LLM Base URL
+                    <input id="settingLlmBaseUrl" type="text" placeholder="openai_compatible 常用">
+                </label>
+                <label>Ollama Base URL
+                    <input id="settingOllamaBaseUrl" type="text" placeholder="http://localhost:11434/v1">
+                </label>
+                <label>STT Backend
+                    <select id="settingSttBackend">
+                        <option value="whisper">whisper</option>
+                        <option value="sensevoice">sensevoice</option>
+                    </select>
+                </label>
+                <label>TTS Backend
+                    <select id="settingTtsBackend">
+                        <option value="chatt">chatt</option>
+                        <option value="say">say</option>
+                        <option value="edge">edge</option>
+                        <option value="cosyvoice">cosyvoice</option>
+                        <option value="fish">fish</option>
+                    </select>
+                </label>
+                <label>Host
+                    <input id="settingHost" type="text" placeholder="0.0.0.0">
+                </label>
+                <label>Port
+                    <input id="settingPort" type="number" min="1" max="65535" placeholder="8000">
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button id="saveSettingsBtn" type="button" class="primary-btn">保存并开始对话</button>
+            </div>
+        </div>
     </div>
     <script src="/app/shared/client.js"></script>
 </body>

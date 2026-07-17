@@ -104,6 +104,21 @@ Use Python from `venv` to avoid incompatible dependency resolution from system o
 ./venv/bin/python -m callio
 ```
 
+### Setup Wizard
+
+Use the interactive wizard to generate or update `.env` with runnable settings
+(LLM provider/model, Ollama endpoint/model, STT/TTS backend, server port, webhooks, worker runtime options).
+
+```bash
+./venv/bin/python -m callio setup
+```
+
+Alias:
+
+```bash
+./venv/bin/python -m callio init
+```
+
 Optional startup flag:
 
 ```bash

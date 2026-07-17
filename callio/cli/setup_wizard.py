@@ -5,13 +5,13 @@ Run:
 """
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 _ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+_EXAMPLE_ENV_FILE = Path(__file__).resolve().parents[2] / ".env.example"
 
 
 def _print_header(text: str) -> None:
@@ -69,17 +69,25 @@ def _check_cli(cmd: str) -> bool:
     return shutil.which(cmd) is not None
 
 
-def _load_existing_env() -> dict[str, str]:
-    """Parse an existing .env file into a dict."""
+def _load_env_file(path: Path) -> dict[str, str]:
+    """Parse a dotenv-style file into a dict."""
     env: dict[str, str] = {}
-    if _ENV_FILE.exists():
-        for line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" in line:
-                key, _, value = line.partition("=")
-                env[key.strip()] = value.strip().strip('"').strip("'")
+    if not path.exists():
+        return env
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, _, value = line.partition("=")
+            env[key.strip()] = value.strip().strip('"').strip("'")
+    return env
+
+
+def _load_existing_env() -> dict[str, str]:
+    """Load defaults from .env.example and override with .env if present."""
+    env = _load_env_file(_EXAMPLE_ENV_FILE)
+    env.update(_load_env_file(_ENV_FILE))
     return env
 
 
@@ -110,22 +118,28 @@ def _setup_llm(config: dict[str, str]) -> None:
             config.get("CALLIO_OLLAMA_BASE_URL", "http://localhost:11434/v1"),
         )
         config["CALLIO_OLLAMA_BASE_URL"] = base_url
+        config.pop("CALLIO_LLM_BASE_URL", None)
         model = _ask("LLM model name", config.get("CALLIO_LLM_MODEL", "qwen2.5:7b"))
         config["CALLIO_LLM_MODEL"] = model
+        if _check_cli("ollama") and model and _ask_bool("  Pull this Ollama model now?", default=False):
+            subprocess.run(["ollama", "pull", model], check=False)
 
     elif provider == "openai":
+        config.pop("CALLIO_LLM_BASE_URL", None)
         api_key = _ask("OpenAI API key (OPENAI_API_KEY)", config.get("CALLIO_LLM_API_KEY", ""))
         config["CALLIO_LLM_API_KEY"] = api_key
         model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "gpt-4o"))
         config["CALLIO_LLM_MODEL"] = model
 
     elif provider == "anthropic":
+        config.pop("CALLIO_LLM_BASE_URL", None)
         api_key = _ask("Anthropic API key", config.get("CALLIO_LLM_API_KEY", ""))
         config["CALLIO_LLM_API_KEY"] = api_key
         model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "claude-3-5-sonnet-20241022"))
         config["CALLIO_LLM_MODEL"] = model
 
     elif provider == "gemini":
+        config.pop("CALLIO_LLM_BASE_URL", None)
         api_key = _ask("Gemini API key", config.get("CALLIO_LLM_API_KEY", ""))
         config["CALLIO_LLM_API_KEY"] = api_key
         model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "gemini-1.5-pro"))
@@ -212,6 +226,8 @@ def _setup_tts(config: dict[str, str]) -> None:
         )
         if hf_endpoint:
             config["CALLIO_HF_ENDPOINT"] = hf_endpoint
+        else:
+            config.pop("CALLIO_HF_ENDPOINT", None)
 
     elif backend == "say":
         if not _check_cli("say"):
@@ -299,6 +315,75 @@ def _setup_server(config: dict[str, str]) -> None:
     config["CALLIO_LOG_LEVEL"] = log_level
 
 
+def _setup_runtime(config: dict[str, str]) -> None:
+    _print_header("Runtime / Worker Configuration")
+
+    agent_backend = _ask_choice(
+        "Agent backend",
+        ["auto", "hermes", "openclaw", "goose", "aider", "claude"],
+        config.get("CALLIO_AGENT_BACKEND", "auto") or "auto",
+    )
+    if agent_backend != "auto":
+        config["CALLIO_AGENT_BACKEND"] = agent_backend
+    else:
+        config.pop("CALLIO_AGENT_BACKEND", None)
+
+    agent_command = _ask(
+        "Custom agent command (optional, must include {task})",
+        config.get("CALLIO_AGENT_COMMAND", ""),
+    )
+    if agent_command:
+        config["CALLIO_AGENT_COMMAND"] = agent_command
+    else:
+        config.pop("CALLIO_AGENT_COMMAND", None)
+
+    config["CALLIO_WHISPER_PRELOAD"] = "1" if _ask_bool(
+        "Preload Whisper model at startup?",
+        default=config.get("CALLIO_WHISPER_PRELOAD", "1") == "1",
+    ) else "0"
+    config["CALLIO_TTS_PRELOAD"] = "1" if _ask_bool(
+        "Preload TTS backend at startup?",
+        default=config.get("CALLIO_TTS_PRELOAD", "1") == "1",
+    ) else "0"
+    config["CALLIO_REQUIRE_VERBAL_CONFIRM"] = "1" if _ask_bool(
+        "Require verbal confirmation before execute?",
+        default=config.get("CALLIO_REQUIRE_VERBAL_CONFIRM", "1") == "1",
+    ) else "0"
+
+    config["CALLIO_VAD_STOP_SECS"] = _ask(
+        "VAD stop silence seconds",
+        config.get("CALLIO_VAD_STOP_SECS", "0.4"),
+    )
+    config["CALLIO_NOTIFY_TIMEOUT_SEC"] = _ask(
+        "Notification timeout seconds",
+        config.get("CALLIO_NOTIFY_TIMEOUT_SEC", "8"),
+    )
+    config["CALLIO_MAX_PARALLEL_TASKS"] = _ask(
+        "Max parallel tasks per session",
+        config.get("CALLIO_MAX_PARALLEL_TASKS", "3"),
+    )
+    config["CALLIO_GLOBAL_MAX_PARALLEL"] = _ask(
+        "Global max parallel tasks",
+        config.get("CALLIO_GLOBAL_MAX_PARALLEL", "5"),
+    )
+    config["CALLIO_TASK_TIMEOUT_SEC"] = _ask(
+        "Task timeout seconds",
+        config.get("CALLIO_TASK_TIMEOUT_SEC", "3600"),
+    )
+    config["CALLIO_EXECUTE_MAX_RETRIES"] = _ask(
+        "Task execute max retries",
+        config.get("CALLIO_EXECUTE_MAX_RETRIES", "3"),
+    )
+    config["CALLIO_SUMMARIZE_DEBOUNCE_SEC"] = _ask(
+        "Summarize debounce seconds",
+        config.get("CALLIO_SUMMARIZE_DEBOUNCE_SEC", "30"),
+    )
+    config["CALLIO_SANDBOX_ROOT"] = _ask(
+        "Sandbox root path",
+        config.get("CALLIO_SANDBOX_ROOT", str(Path.cwd())),
+    )
+
+
 def _write_env(config: dict[str, str]) -> None:
     lines = ["# Callio configuration — generated by `callio setup`", ""]
     for key, value in sorted(config.items()):
@@ -317,15 +402,23 @@ def _print_summary(config: dict[str, str]) -> None:
     rows = [
         ("LLM provider", config.get("CALLIO_LLM_PROVIDER", "")),
         ("LLM model", config.get("CALLIO_LLM_MODEL", "")),
+        ("LLM base URL", config.get("CALLIO_LLM_BASE_URL", "")),
+        ("Ollama URL", config.get("CALLIO_OLLAMA_BASE_URL", "")),
         ("STT backend", config.get("CALLIO_STT_BACKEND", "")),
         ("Whisper model", config.get("CALLIO_WHISPER_MODEL", "")),
         ("Whisper device", config.get("CALLIO_WHISPER_DEVICE", "")),
+        ("Whisper preload", config.get("CALLIO_WHISPER_PRELOAD", "")),
         ("FunASR model", config.get("CALLIO_FUNASR_MODEL", "")),
         ("TTS backend", config.get("CALLIO_TTS_BACKEND", "")),
+        ("TTS preload", config.get("CALLIO_TTS_PRELOAD", "")),
         ("HF endpoint", config.get("CALLIO_HF_ENDPOINT", "")),
         ("Edge voice", config.get("CALLIO_EDGE_TTS_VOICE", "")),
         ("CosyVoice URL", config.get("CALLIO_COSYVOICE_URL", "")),
         ("Fish Speech URL", config.get("CALLIO_FISH_SPEECH_URL", "")),
+        ("Agent backend", config.get("CALLIO_AGENT_BACKEND", "")),
+        ("Task timeout", config.get("CALLIO_TASK_TIMEOUT_SEC", "")),
+        ("Global parallel", config.get("CALLIO_GLOBAL_MAX_PARALLEL", "")),
+        ("VAD stop secs", config.get("CALLIO_VAD_STOP_SECS", "")),
         ("Host", config.get("CALLIO_HOST", "")),
         ("Port", config.get("CALLIO_PORT", "")),
         ("Log level", config.get("CALLIO_LOG_LEVEL", "")),
@@ -359,11 +452,18 @@ def run_setup_wizard() -> None:
             print("  Aborted — existing configuration unchanged.")
             return
 
+    configure_runtime = _ask_bool(
+        "Configure runtime/worker advanced options too?",
+        default=True,
+    )
+
     _setup_llm(config)
     _setup_stt(config)
     _setup_tts(config)
     _setup_notifications(config)
     _setup_server(config)
+    if configure_runtime:
+        _setup_runtime(config)
 
     _print_header("Summary")
     _print_summary(config)
