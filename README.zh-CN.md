@@ -104,6 +104,21 @@ export CALLIO_HF_ENDPOINT=https://hf-mirror.com
 ./venv/bin/python -m callio
 ```
 
+### 设置向导
+
+可通过交互式向导生成或更新 `.env`，一次性配置可运行所需的关键项
+（LLM 提供方与模型、Ollama 地址与模型、STT/TTS 后端、服务端口、通知 webhook、Worker 运行参数等）。
+
+```bash
+./venv/bin/python -m callio setup
+```
+
+别名：
+
+```bash
+./venv/bin/python -m callio init
+```
+
 可选启动参数：
 
 ```bash

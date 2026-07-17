@@ -1,12 +1,50 @@
 (function () {
     const TARGET_SAMPLE_RATE = 16000;
     const mode = document.body.dataset.clientMode || "web";
+    const LAST_SESSION_STORAGE_KEY = "callio.lastSessionId";
+    const SETTINGS_READY_STORAGE_KEY = "callio.settingsReady";
+
+    function loadStoredSessionId() {
+        try {
+            return localStorage.getItem(LAST_SESSION_STORAGE_KEY) || null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function storeSessionId(sessionId) {
+        try {
+            if (sessionId) {
+                localStorage.setItem(LAST_SESSION_STORAGE_KEY, sessionId);
+            } else {
+                localStorage.removeItem(LAST_SESSION_STORAGE_KEY);
+            }
+        } catch (_) {
+            // Ignore storage failures (private mode / restricted envs).
+        }
+    }
+
+    function loadStoredSettingsReady() {
+        try {
+            return localStorage.getItem(SETTINGS_READY_STORAGE_KEY) === "1";
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function storeSettingsReady(value) {
+        try {
+            localStorage.setItem(SETTINGS_READY_STORAGE_KEY, value ? "1" : "0");
+        } catch (_) {
+            // Ignore storage failures.
+        }
+    }
 
     const state = {
         ws: null,
         statusWs: null,
         sessionId: null,
-        selectedSessionId: null,
+        selectedSessionId: loadStoredSessionId(),
         audioContext: null,
         mediaStream: null,
         audioProcessor: null,
@@ -19,6 +57,7 @@
             label: "",
             at: 0,
         },
+        settingsReady: loadStoredSettingsReady(),
     };
 
     const elements = {
@@ -36,6 +75,21 @@
         taskInput: document.getElementById("taskInput"),
         dispatchTaskBtn: document.getElementById("dispatchTaskBtn"),
         resumeLabel: document.getElementById("resumeLabel"),
+        settingsModal: document.getElementById("settingsModal"),
+        openSettingsBtn: document.getElementById("openSettingsBtn"),
+        openSettingsInlineBtn: document.getElementById("openSettingsInlineBtn"),
+        closeSettingsBtn: document.getElementById("closeSettingsBtn"),
+        saveSettingsBtn: document.getElementById("saveSettingsBtn"),
+        setupGate: document.getElementById("setupGate"),
+        settingLlmProvider: document.getElementById("settingLlmProvider"),
+        settingLlmModel: document.getElementById("settingLlmModel"),
+        settingLlmApiKey: document.getElementById("settingLlmApiKey"),
+        settingLlmBaseUrl: document.getElementById("settingLlmBaseUrl"),
+        settingOllamaBaseUrl: document.getElementById("settingOllamaBaseUrl"),
+        settingSttBackend: document.getElementById("settingSttBackend"),
+        settingTtsBackend: document.getElementById("settingTtsBackend"),
+        settingHost: document.getElementById("settingHost"),
+        settingPort: document.getElementById("settingPort"),
     };
 
     // ---- Toast notification system ----
@@ -197,6 +251,56 @@
         elements.statusHint.textContent = hint || "";
     }
 
+    function applySettingsReadyUI() {
+        if (mode !== "web") {
+            return;
+        }
+        document.body.setAttribute("data-settings-ready", state.settingsReady ? "true" : "false");
+        if (elements.setupGate) {
+            elements.setupGate.hidden = state.settingsReady;
+        }
+        if (!state.settingsReady) {
+            setStatus("warning", "Settings required", "Complete setup wizard before starting voice conversation.");
+        }
+    }
+
+    function openSettingsModal() {
+        if (!elements.settingsModal) return;
+        elements.settingsModal.hidden = false;
+    }
+
+    function closeSettingsModal() {
+        if (!elements.settingsModal) return;
+        elements.settingsModal.hidden = true;
+    }
+
+    function collectSettingsPayload() {
+        return {
+            CALLIO_LLM_PROVIDER: elements.settingLlmProvider?.value || "",
+            CALLIO_LLM_MODEL: elements.settingLlmModel?.value.trim() || "",
+            CALLIO_LLM_API_KEY: elements.settingLlmApiKey?.value.trim() || "",
+            CALLIO_LLM_BASE_URL: elements.settingLlmBaseUrl?.value.trim() || "",
+            CALLIO_OLLAMA_BASE_URL: elements.settingOllamaBaseUrl?.value.trim() || "",
+            CALLIO_STT_BACKEND: elements.settingSttBackend?.value || "",
+            CALLIO_TTS_BACKEND: elements.settingTtsBackend?.value || "",
+            CALLIO_HOST: elements.settingHost?.value.trim() || "",
+            CALLIO_PORT: elements.settingPort?.value.trim() || "",
+        };
+    }
+
+    function fillSettingsForm(data) {
+        if (!data) return;
+        if (elements.settingLlmProvider) elements.settingLlmProvider.value = data.CALLIO_LLM_PROVIDER || "ollama";
+        if (elements.settingLlmModel) elements.settingLlmModel.value = data.CALLIO_LLM_MODEL || "";
+        if (elements.settingLlmApiKey) elements.settingLlmApiKey.value = data.CALLIO_LLM_API_KEY || "";
+        if (elements.settingLlmBaseUrl) elements.settingLlmBaseUrl.value = data.CALLIO_LLM_BASE_URL || "";
+        if (elements.settingOllamaBaseUrl) elements.settingOllamaBaseUrl.value = data.CALLIO_OLLAMA_BASE_URL || "";
+        if (elements.settingSttBackend) elements.settingSttBackend.value = data.CALLIO_STT_BACKEND || "whisper";
+        if (elements.settingTtsBackend) elements.settingTtsBackend.value = data.CALLIO_TTS_BACKEND || "chatt";
+        if (elements.settingHost) elements.settingHost.value = data.CALLIO_HOST || "0.0.0.0";
+        if (elements.settingPort) elements.settingPort.value = data.CALLIO_PORT || "8000";
+    }
+
     function normalizeDisplayText(value) {
         const text = value == null ? "" : String(value);
         const unified = text.replace(/\r\n?/g, "\n");
@@ -295,6 +399,22 @@
         return `${title} · ${ended}`;
     }
 
+    function updateResumeLabel() {
+        if (!elements.resumeLabel) return;
+        if (!state.selectedSessionId) {
+            elements.resumeLabel.textContent = "Current target session: Auto new session";
+            return;
+        }
+        const shortId = state.selectedSessionId.slice(0, 8);
+        elements.resumeLabel.textContent = `Current target session: ${shortId}`;
+    }
+
+    function setSelectedSession(sessionId) {
+        state.selectedSessionId = sessionId || null;
+        storeSessionId(state.selectedSessionId);
+        updateResumeLabel();
+    }
+
     async function requestJson(path, options) {
         const url = new URL(path, window.location.origin);
         if (url.origin !== window.location.origin || !url.pathname.startsWith("/api/v1/")) {
@@ -307,7 +427,44 @@
         return response.json();
     }
 
+    async function loadSetupSettings() {
+        if (mode !== "web" || !elements.settingLlmProvider) return;
+        try {
+            const data = await requestJson("/api/v1/settings");
+            fillSettingsForm(data.settings || {});
+            state.settingsReady = Boolean(data.configured);
+            storeSettingsReady(state.settingsReady);
+            applySettingsReadyUI();
+        } catch (error) {
+            console.warn("Failed to load setup settings", error);
+            state.settingsReady = loadStoredSettingsReady();
+            applySettingsReadyUI();
+        }
+    }
+
+    async function saveSetupSettings() {
+        if (mode !== "web") return;
+        const payload = collectSettingsPayload();
+        const data = await requestJson("/api/v1/settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ settings: payload }),
+        });
+        state.settingsReady = Boolean(data.configured);
+        storeSettingsReady(state.settingsReady);
+        applySettingsReadyUI();
+        if (state.settingsReady) {
+            closeSettingsModal();
+            showToast("Settings saved. You can start conversation now.", "success");
+        } else {
+            showToast(`Settings incomplete: ${(data.missing || []).join(", ") || "check required fields"}`, "warning", 5000);
+        }
+    }
+
     function renderSessions(items) {
+        if (state.selectedSessionId && !items.some((s) => s.session_id === state.selectedSessionId)) {
+            setSelectedSession(null);
+        }
         elements.sessions.innerHTML = "";
         if (!items.length) {
             const empty = document.createElement("p");
@@ -331,7 +488,7 @@
             meta.textContent = formatSessionLabel(session);
             button.append(title, meta);
             button.onclick = async () => {
-                state.selectedSessionId = session.session_id;
+                setSelectedSession(session.session_id);
                 renderSessions(items);
                 await preloadResumeSession(session.session_id);
                 await refreshSessionTasks(session.session_id);
@@ -704,6 +861,7 @@
             if (data.type === "session") {
                 resetAssistantDraft();
                 state.sessionId = data.session_id;
+                setSelectedSession(data.session_id);
                 if (data.resumed) {
                     setStatus("success", "Resuming session", data.title || state.sessionId.slice(0, 8));
                 } else {
@@ -765,6 +923,11 @@
     }
 
     async function startSession() {
+        if (mode === "web" && !state.settingsReady) {
+            openSettingsModal();
+            showToast("Please finish setup wizard before starting conversation.", "warning", 4200);
+            return;
+        }
         elements.startBtn.disabled = true;
         try {
             await requestMicrophone();
@@ -799,7 +962,7 @@
             state.ws.close();
             state.ws = null;
         }
-        elements.startBtn.disabled = false;
+        elements.startBtn.disabled = mode === "web" ? !state.settingsReady : false;
         elements.stopBtn.disabled = true;
         state.sessionId = null;
         if (!skipStatusUpdate) {
@@ -853,6 +1016,37 @@
         });
     }
 
+    function bindTopNavigation() {
+        document.querySelectorAll("[data-nav-target]").forEach((button) => {
+            button.addEventListener("click", () => {
+                const targetId = button.getAttribute("data-nav-target");
+                const node = targetId ? document.getElementById(targetId) : null;
+                if (node) {
+                    node.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+            });
+        });
+    }
+
+    function bindSettingsWizard() {
+        if (mode !== "web") return;
+        elements.openSettingsBtn?.addEventListener("click", openSettingsModal);
+        elements.openSettingsInlineBtn?.addEventListener("click", openSettingsModal);
+        elements.closeSettingsBtn?.addEventListener("click", closeSettingsModal);
+        elements.settingsModal?.addEventListener("click", (event) => {
+            if (event.target === elements.settingsModal) {
+                closeSettingsModal();
+            }
+        });
+        elements.saveSettingsBtn?.addEventListener("click", async () => {
+            try {
+                await saveSetupSettings();
+            } catch (error) {
+                showToast(`Save settings failed: ${error.message}`, "danger", 5000);
+            }
+        });
+    }
+
     elements.startBtn.addEventListener("click", startSession);
     elements.stopBtn.addEventListener("click", stopSession);
     elements.refreshBtn.addEventListener("click", async () => {
@@ -871,13 +1065,20 @@
     });
 
     bindQuickActions();
+    bindTopNavigation();
+    bindSettingsWizard();
     loadSessionOptions();
     refreshSessionTasks();
     resetLiveReport();
+    updateResumeLabel();
+    applySettingsReadyUI();
+    loadSetupSettings();
 
     if (mode === "mobile") {
         setStatus("warning", "Mobile ready", "Use HTTPS to enable microphone access.");
     } else {
-        setStatus("warning", "Disconnected", "Choose a previous session or start a new voice collaboration round.");
+        if (state.settingsReady) {
+            setStatus("warning", "Disconnected", "Choose a previous session or start a new voice collaboration round.");
+        }
     }
 })();

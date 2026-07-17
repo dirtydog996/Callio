@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _REFRESH_INTERVAL_SEC = 3.0
+_COMPLETION_CHECK_INTERVAL_SEC = 1.0
 
 
 class SessionHook(FrameProcessor):
@@ -39,6 +40,7 @@ class SessionHook(FrameProcessor):
         self._settings = settings or get_settings()
         self._memory_hub = memory_hub
         self._last_refresh: float = 0.0
+        self._last_completion_check: float = 0.0
         # Tracks node_ids whose results have already been reported to the user
         # so we only surface each completion once per voice session.
         self._announced_completions: set[str] = set()
@@ -47,6 +49,9 @@ class SessionHook(FrameProcessor):
         """Return completed tasks with results not yet announced in this session."""
         fresh = self._orchestrator.database.list_completed_with_results(self._session_id)
         return [t for t in fresh if str(t["node_id"]) not in self._announced_completions]
+
+    async def _collect_new_completions_async(self) -> list[dict]:
+        return await asyncio.to_thread(self._collect_new_completions)
 
     def _mark_announced(self, tasks: list[dict]) -> None:
         for t in tasks:
@@ -58,9 +63,15 @@ class SessionHook(FrameProcessor):
             if isinstance(frame, TranscriptionFrame) and frame.text:
                 self._orchestrator.transcripts.append(self._session_id, "user", frame.text)
                 now = time.monotonic()
+
+                # Rate-limit completion checks and offload sync DB I/O from event loop.
+                new_completions: list[dict] = []
+                if now - self._last_completion_check >= _COMPLETION_CHECK_INTERVAL_SEC:
+                    self._last_completion_check = now
+                    new_completions = await self._collect_new_completions_async()
+
                 # Check for new task completions; force a refresh if any are found
                 # so the proactive note is visible to the LLM for this turn.
-                new_completions = self._collect_new_completions()
                 force_refresh = bool(new_completions)
                 if force_refresh or now - self._last_refresh >= _REFRESH_INTERVAL_SEC:
                     self._last_refresh = now
