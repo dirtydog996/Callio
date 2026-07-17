@@ -761,7 +761,7 @@ button:active:not(:disabled) { transform: scale(0.97); }
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
-#settingOllamaModelSearch {
+#settingOllamaModelSelect {
     flex: 1;
     min-width: 0;
 }

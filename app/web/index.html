@@ -133,8 +133,9 @@
                         <div id="ollamaModelGroup" class="settings-field field-span-2">
                             <span class="field-label">Installed Ollama Models</span>
                             <div class="inline-row">
-                                <input id="settingOllamaModelSearch" type="text" list="ollamaModelOptions" placeholder="Search or type an installed model">
-                                <datalist id="ollamaModelOptions"></datalist>
+                                <select id="settingOllamaModelSelect">
+                                    <option value="">Loading installed models...</option>
+                                </select>
                                 <button id="refreshOllamaModelsBtn" type="button" class="ghost-btn inline-btn">Refresh</button>
                             </div>
                             <div id="ollamaStatus" class="field-note">Checking Ollama service status...</div>

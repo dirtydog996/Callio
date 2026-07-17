@@ -13,7 +13,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from callio.config.settings import Settings, get_settings
+from callio.config.settings import Settings, get_settings, reload_settings_from_env
 from callio.web import WEB_CLIENT_PATH
 from callio.core.database import Database
 from callio.core.memory import MemoryHub
@@ -261,6 +261,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if key in _SETTINGS_KEYS
         }
         _save_runtime_settings_map(payload)
+        refreshed_settings = reload_settings_from_env()
+        app.state.settings = refreshed_settings
         settings_map = _load_runtime_settings_map()
         missing = _settings_missing_keys(settings_map)
         return {
@@ -268,7 +270,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "settings": settings_map,
             "configured": not missing,
             "missing": missing,
-            "restart_required": True,
+            "restart_required": False,
         }
 
     @app.get("/api/v1/settings/ollama-models")

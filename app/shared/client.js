@@ -91,8 +91,7 @@
         settingTtsBackend: document.getElementById("settingTtsBackend"),
         settingHost: document.getElementById("settingHost"),
         settingPort: document.getElementById("settingPort"),
-        settingOllamaModelSearch: document.getElementById("settingOllamaModelSearch"),
-        ollamaModelOptions: document.getElementById("ollamaModelOptions"),
+        settingOllamaModelSelect: document.getElementById("settingOllamaModelSelect"),
         refreshOllamaModelsBtn: document.getElementById("refreshOllamaModelsBtn"),
         ollamaModelGroup: document.getElementById("ollamaModelGroup"),
         ollamaStatus: document.getElementById("ollamaStatus"),
@@ -345,26 +344,33 @@
     }
 
     function fillOllamaModelSelect(models, selectedModel) {
-        if (!elements.ollamaModelOptions) return;
+        if (!elements.settingOllamaModelSelect) return;
         const normalized = Array.isArray(models) ? models : [];
-        elements.ollamaModelOptions.innerHTML = "";
+        elements.settingOllamaModelSelect.innerHTML = "";
+
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = normalized.length
+            ? "Select an installed model"
+            : "No installed model found";
+        elements.settingOllamaModelSelect.appendChild(placeholder);
 
         normalized.forEach((name) => {
             const option = document.createElement("option");
             option.value = name;
-            elements.ollamaModelOptions.appendChild(option);
+            option.textContent = name;
+            elements.settingOllamaModelSelect.appendChild(option);
         });
 
-        if (elements.settingOllamaModelSearch) {
-            elements.settingOllamaModelSearch.placeholder = normalized.length
-                ? "Search or type an installed model"
-                : "No installed model found";
-            elements.settingOllamaModelSearch.value = selectedModel || "";
+        if (selectedModel && normalized.includes(selectedModel)) {
+            elements.settingOllamaModelSelect.value = selectedModel;
+        } else {
+            elements.settingOllamaModelSelect.value = "";
         }
     }
 
     async function loadOllamaModels() {
-        if (mode !== "web" || !elements.settingOllamaModelSearch) return;
+        if (mode !== "web" || !elements.settingOllamaModelSelect) return;
         const provider = elements.settingLlmProvider?.value || "ollama";
         if (provider !== "ollama") {
             applyProviderSpecificUI();
@@ -373,7 +379,7 @@
 
         const rawBaseUrl = elements.settingOllamaBaseUrl?.value.trim() || "";
         const baseUrl = encodeURIComponent(rawBaseUrl);
-        elements.settingOllamaModelSearch.placeholder = "Loading installed models...";
+        elements.settingOllamaModelSelect.innerHTML = '<option value="">Loading installed models...</option>';
         setOllamaStatus("Checking Ollama service and installed models...", "");
         try {
             const data = await requestJson(`/api/v1/settings/ollama-models?base_url=${baseUrl}`);
@@ -432,6 +438,7 @@
         if (elements.settingTtsBackend) elements.settingTtsBackend.value = data.CALLIO_TTS_BACKEND || "chatt";
         if (elements.settingHost) elements.settingHost.value = data.CALLIO_HOST || "0.0.0.0";
         if (elements.settingPort) elements.settingPort.value = data.CALLIO_PORT || "8000";
+        if (elements.settingOllamaModelSelect) elements.settingOllamaModelSelect.value = data.CALLIO_LLM_MODEL || "";
         applyProviderSpecificUI();
     }
 
@@ -672,7 +679,6 @@
     }
 
     async function preloadResumeSession(sessionId) {
-            if (elements.settingOllamaModelSearch) elements.settingOllamaModelSearch.value = data.CALLIO_LLM_MODEL || "";
         const data = await requestJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}`);
         if (!data.found || !data.session) return;
         resetMessages();
@@ -1190,8 +1196,8 @@
         elements.settingOllamaBaseUrl?.addEventListener("change", async () => {
             await loadOllamaModels();
         });
-        elements.settingOllamaModelSearch?.addEventListener("input", () => {
-            const value = elements.settingOllamaModelSearch.value || "";
+        elements.settingOllamaModelSelect?.addEventListener("change", () => {
+            const value = elements.settingOllamaModelSelect.value || "";
             if (value && elements.settingLlmModel) {
                 elements.settingLlmModel.value = value;
             }
