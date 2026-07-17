@@ -112,57 +112,79 @@
                 <button id="closeSettingsBtn" type="button" class="ghost-btn">Close</button>
             </div>
             <div class="modal-meta">Settings are written to the server .env file. Save and restart the service to fully apply provider-level changes.</div>
-            <div class="settings-grid">
-                <label>LLM Provider
-                    <select id="settingLlmProvider">
-                        <option value="ollama">ollama</option>
-                        <option value="openai">openai</option>
-                        <option value="anthropic">anthropic</option>
-                        <option value="gemini">gemini</option>
-                        <option value="openai_compatible">openai_compatible</option>
-                    </select>
-                </label>
-                <label>LLM Model
-                    <input id="settingLlmModel" type="text" placeholder="qwen2.5:7b">
-                </label>
-                <label id="ollamaModelGroup">Ollama Installed Models
-                    <div class="inline-row">
-                        <select id="settingOllamaModelSelect">
-                            <option value="">Loading models...</option>
-                        </select>
-                        <button id="refreshOllamaModelsBtn" type="button" class="ghost-btn inline-btn">Refresh</button>
+            <div class="settings-layout">
+                <section class="settings-card">
+                    <div class="settings-card-title">Language Model</div>
+                    <div class="settings-grid">
+                        <label class="settings-field">
+                            <span class="field-label">LLM Provider</span>
+                            <select id="settingLlmProvider">
+                                <option value="ollama">ollama</option>
+                                <option value="openai">openai</option>
+                                <option value="anthropic">anthropic</option>
+                                <option value="gemini">gemini</option>
+                                <option value="openai_compatible">openai_compatible</option>
+                            </select>
+                        </label>
+                        <label class="settings-field">
+                            <span class="field-label">LLM Model</span>
+                            <input id="settingLlmModel" type="text" placeholder="qwen2.5:7b">
+                        </label>
+                        <div id="ollamaModelGroup" class="settings-field field-span-2">
+                            <span class="field-label">Installed Ollama Models</span>
+                            <div class="inline-row">
+                                <select id="settingOllamaModelSelect">
+                                    <option value="">Loading models...</option>
+                                </select>
+                                <button id="refreshOllamaModelsBtn" type="button" class="ghost-btn inline-btn">Refresh</button>
+                            </div>
+                            <div id="ollamaStatus" class="field-note">Checking Ollama service status...</div>
+                        </div>
+                        <label class="settings-field">
+                            <span class="field-label">LLM API Key</span>
+                            <input id="settingLlmApiKey" type="password" placeholder="Optional if already provided in server env">
+                        </label>
+                        <label class="settings-field">
+                            <span class="field-label">LLM Base URL</span>
+                            <input id="settingLlmBaseUrl" type="text" placeholder="Common for openai_compatible provider">
+                        </label>
+                        <label class="settings-field field-span-2">
+                            <span class="field-label">Ollama Base URL</span>
+                            <input id="settingOllamaBaseUrl" type="text" placeholder="http://localhost:11434/v1">
+                        </label>
                     </div>
-                </label>
-                <label>LLM API Key
-                    <input id="settingLlmApiKey" type="password" placeholder="Optional if already provided in server env">
-                </label>
-                <label>LLM Base URL
-                    <input id="settingLlmBaseUrl" type="text" placeholder="Common for openai_compatible provider">
-                </label>
-                <label>Ollama Base URL
-                    <input id="settingOllamaBaseUrl" type="text" placeholder="http://localhost:11434/v1">
-                </label>
-                <label>STT Backend
-                    <select id="settingSttBackend">
-                        <option value="whisper">whisper</option>
-                        <option value="sensevoice">sensevoice</option>
-                    </select>
-                </label>
-                <label>TTS Backend
-                    <select id="settingTtsBackend">
-                        <option value="chatt">chatt</option>
-                        <option value="say">say</option>
-                        <option value="edge">edge</option>
-                        <option value="cosyvoice">cosyvoice</option>
-                        <option value="fish">fish</option>
-                    </select>
-                </label>
-                <label>Host
-                    <input id="settingHost" type="text" placeholder="0.0.0.0">
-                </label>
-                <label>Port
-                    <input id="settingPort" type="number" min="1" max="65535" placeholder="8000">
-                </label>
+                </section>
+
+                <section class="settings-card">
+                    <div class="settings-card-title">Voice Runtime</div>
+                    <div class="settings-grid">
+                        <label class="settings-field">
+                            <span class="field-label">STT Backend</span>
+                            <select id="settingSttBackend">
+                                <option value="whisper">whisper</option>
+                                <option value="sensevoice">sensevoice</option>
+                            </select>
+                        </label>
+                        <label class="settings-field">
+                            <span class="field-label">TTS Backend</span>
+                            <select id="settingTtsBackend">
+                                <option value="chatt">chatt</option>
+                                <option value="say">say</option>
+                                <option value="edge">edge</option>
+                                <option value="cosyvoice">cosyvoice</option>
+                                <option value="fish">fish</option>
+                            </select>
+                        </label>
+                        <label class="settings-field">
+                            <span class="field-label">Host</span>
+                            <input id="settingHost" type="text" placeholder="0.0.0.0">
+                        </label>
+                        <label class="settings-field">
+                            <span class="field-label">Port</span>
+                            <input id="settingPort" type="number" min="1" max="65535" placeholder="8000">
+                        </label>
+                    </div>
+                </section>
             </div>
             <div class="modal-footer">
                 <button id="saveSettingsBtn" type="button" class="primary-btn">Save and Unlock Chat</button>

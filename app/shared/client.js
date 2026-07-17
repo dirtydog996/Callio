@@ -94,6 +94,7 @@
         settingOllamaModelSelect: document.getElementById("settingOllamaModelSelect"),
         refreshOllamaModelsBtn: document.getElementById("refreshOllamaModelsBtn"),
         ollamaModelGroup: document.getElementById("ollamaModelGroup"),
+        ollamaStatus: document.getElementById("ollamaStatus"),
     };
 
     // ---- Toast notification system ----
@@ -273,6 +274,7 @@
         elements.settingsModal.classList.add("is-open");
         elements.settingsModal.removeAttribute("hidden");
         elements.settingsModal.hidden = false;
+        loadOllamaModels().catch(() => {});
     }
 
     function closeSettingsModal() {
@@ -287,6 +289,16 @@
         if (!elements.ollamaModelGroup) return;
         const showOllama = provider === "ollama";
         elements.ollamaModelGroup.hidden = !showOllama;
+        if (!showOllama && elements.ollamaStatus) {
+            elements.ollamaStatus.className = "field-note";
+            elements.ollamaStatus.textContent = "Ollama model discovery is only used when the provider is set to ollama.";
+        }
+    }
+
+    function setOllamaStatus(message, kind) {
+        if (!elements.ollamaStatus) return;
+        elements.ollamaStatus.className = `field-note ${kind || ""}`.trim();
+        elements.ollamaStatus.textContent = message;
     }
 
     function fillOllamaModelSelect(models, selectedModel) {
@@ -315,19 +327,32 @@
     async function loadOllamaModels() {
         if (mode !== "web" || !elements.settingOllamaModelSelect) return;
         const provider = elements.settingLlmProvider?.value || "ollama";
-        if (provider !== "ollama") return;
+        if (provider !== "ollama") {
+            applyProviderSpecificUI();
+            return;
+        }
 
-        const baseUrl = encodeURIComponent(elements.settingOllamaBaseUrl?.value.trim() || "");
+        const rawBaseUrl = elements.settingOllamaBaseUrl?.value.trim() || "";
+        const baseUrl = encodeURIComponent(rawBaseUrl);
         elements.settingOllamaModelSelect.innerHTML = '<option value="">Loading models...</option>';
+        setOllamaStatus("Checking Ollama service and installed models...", "");
         try {
             const data = await requestJson(`/api/v1/settings/ollama-models?base_url=${baseUrl}`);
             state.ollamaModels = data.models || [];
             fillOllamaModelSelect(state.ollamaModels, elements.settingLlmModel?.value.trim() || "");
-            if (!state.ollamaModels.length && data.error) {
-                showToast(`Ollama model scan failed: ${data.error}`, "warning", 5000);
+            if (data.reachable) {
+                if (state.ollamaModels.length) {
+                    setOllamaStatus(`Ollama is reachable at ${data.base_url}. Found ${state.ollamaModels.length} installed model${state.ollamaModels.length > 1 ? "s" : ""}.`, "success");
+                } else {
+                    setOllamaStatus(`Ollama is reachable at ${data.base_url}, but no installed models were returned. Run 'ollama list' or pull a model first.`, "warning");
+                }
+            } else {
+                setOllamaStatus(`Ollama is not reachable at ${data.base_url}. Start the service and verify the URL. Error: ${data.error || "unknown error"}`, "danger");
+                showToast(`Ollama is not reachable: ${data.error || "unknown error"}`, "warning", 5000);
             }
         } catch (error) {
             fillOllamaModelSelect([], "");
+            setOllamaStatus(`Failed to load Ollama models. Check whether the service is running and whether the base URL is correct. Error: ${error.message}`, "danger");
             showToast(`Failed to load Ollama models: ${error.message}`, "warning", 5000);
         }
     }
