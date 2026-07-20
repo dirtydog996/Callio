@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import pathlib
 import sys
@@ -78,6 +79,23 @@ class NotifierTests(unittest.TestCase):
         called_urls = [args[0] for args, _ in post_mock.call_args_list]
         self.assertIn("https://example.com/wechat", called_urls)
         self.assertIn("https://example.com/discord", called_urls)
+
+    @patch("callio.voice.notifier.requests.post")
+    def test_notify_session_finished_inside_running_loop(self, post_mock) -> None:
+        post_mock.return_value.status_code = 200
+        settings = Settings(notify_wechat_webhook="https://example.com/wechat")
+
+        async def _run() -> None:
+            notify_session_finished(
+                settings,
+                session_id="sess1",
+                session_title="demo",
+                transcript="user: hi",
+                summary="done",
+            )
+            await asyncio.sleep(0)
+
+        asyncio.run(_run())
 
 
 if __name__ == "__main__":

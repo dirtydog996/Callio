@@ -8,6 +8,20 @@ from pathlib import Path
 from callio.web import APP_DIR, MOBILE_DIR, SHARED_DIR, STATIC_DIR
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+_ENV_FILE = BASE_DIR / ".env"
+
+
+def _load_env_file(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    env: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        env[key.strip()] = value.strip().strip('"').strip("'")
+    return env
 
 
 @dataclass(slots=True)
@@ -79,7 +93,23 @@ class Settings:
     notify_telegram_webhook: str = os.getenv("CALLIO_NOTIFY_TELEGRAM_WEBHOOK", "")
     notify_timeout_sec: int = int(os.getenv("CALLIO_NOTIFY_TIMEOUT_SEC", "8"))
 
+    def validate_complete(self) -> None:
+        """Compatibility hook for third-party service settings validation."""
+        return None
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
+
+
+def reload_settings_from_env() -> Settings:
+    env_map = _load_env_file(_ENV_FILE)
+    callio_keys = {key for key in os.environ if key.startswith("CALLIO_")}
+    for key in callio_keys:
+        if key not in env_map:
+            os.environ.pop(key, None)
+    for key, value in env_map.items():
+        os.environ[key] = value
+    get_settings.cache_clear()
+    return get_settings()
