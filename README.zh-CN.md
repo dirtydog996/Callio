@@ -145,6 +145,14 @@ python app/cli/main.py dispatch --title "Plan tasks" --description "Break curren
 - Mobile：`/app/mobile/index.html`
 - 兼容别名：`/static/index.html`
 
+## 示例配置
+
+可直接复制使用的配置示例位于 `/examples`：
+
+- 本地 Ollama 快速配置：`examples/01-local-ollama`
+- DeepSeek / Qwen / OpenAI 提供方配置：`examples/02-remote-llm-providers`
+- 更高性能 ASR/TTS 配置：`examples/03-efficient-voice`
+
 ## 配置
 
 ### 关键环境变量
