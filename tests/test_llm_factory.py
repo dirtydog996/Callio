@@ -224,6 +224,77 @@ class BuildChatClientTests(unittest.TestCase):
             build_chat_client(s)
         self.assertEqual(cap.last_kwargs()["base_url"], "http://custom:8080/v1")
 
+    # ------------------------------------------------------------------
+    # DeepSeek provider
+    # ------------------------------------------------------------------
+    def test_deepseek_uses_deepseek_base_url(self) -> None:
+        cap = _OpenAICallCapture()
+        with patch(_FACTORY_PATH, cap):
+            s = self._settings(llm_provider="deepseek", llm_api_key="ds-key")
+            build_chat_client(s)
+        kw = cap.last_kwargs()
+        self.assertIn("api.deepseek.com", kw["base_url"])
+        self.assertEqual(kw["api_key"], "ds-key")
+
+    def test_deepseek_reads_deepseek_api_key_env(self) -> None:
+        cap = _OpenAICallCapture()
+        s = self._settings(llm_provider="deepseek", llm_api_key="")
+        with patch(_FACTORY_PATH, cap), \
+             patch.dict(os.environ, {"DEEPSEEK_API_KEY": "env-ds-key"}, clear=False):
+            build_chat_client(s)
+        self.assertEqual(cap.last_kwargs()["api_key"], "env-ds-key")
+
+    def test_deepseek_explicit_base_url_override(self) -> None:
+        cap = _OpenAICallCapture()
+        with patch(_FACTORY_PATH, cap):
+            s = self._settings(
+                llm_provider="deepseek",
+                llm_api_key="k",
+                llm_base_url="https://proxy.example.com/v1",
+            )
+            build_chat_client(s)
+        self.assertEqual(cap.last_kwargs()["base_url"], "https://proxy.example.com/v1")
+
+    # ------------------------------------------------------------------
+    # Qwen provider
+    # ------------------------------------------------------------------
+    def test_qwen_uses_dashscope_base_url(self) -> None:
+        cap = _OpenAICallCapture()
+        with patch(_FACTORY_PATH, cap):
+            s = self._settings(llm_provider="qwen", llm_api_key="qwen-key")
+            build_chat_client(s)
+        kw = cap.last_kwargs()
+        self.assertIn("dashscope.aliyuncs.com", kw["base_url"])
+        self.assertEqual(kw["api_key"], "qwen-key")
+
+    def test_qwen_reads_dashscope_api_key_env(self) -> None:
+        cap = _OpenAICallCapture()
+        s = self._settings(llm_provider="qwen", llm_api_key="")
+        with patch(_FACTORY_PATH, cap), \
+             patch.dict(os.environ, {"DASHSCOPE_API_KEY": "env-qwen-key"}, clear=False):
+            build_chat_client(s)
+        self.assertEqual(cap.last_kwargs()["api_key"], "env-qwen-key")
+
+    # ------------------------------------------------------------------
+    # Kimi provider
+    # ------------------------------------------------------------------
+    def test_kimi_uses_moonshot_base_url(self) -> None:
+        cap = _OpenAICallCapture()
+        with patch(_FACTORY_PATH, cap):
+            s = self._settings(llm_provider="kimi", llm_api_key="kimi-key")
+            build_chat_client(s)
+        kw = cap.last_kwargs()
+        self.assertIn("api.moonshot.cn", kw["base_url"])
+        self.assertEqual(kw["api_key"], "kimi-key")
+
+    def test_kimi_reads_moonshot_api_key_env(self) -> None:
+        cap = _OpenAICallCapture()
+        s = self._settings(llm_provider="kimi", llm_api_key="")
+        with patch(_FACTORY_PATH, cap), \
+             patch.dict(os.environ, {"MOONSHOT_API_KEY": "env-kimi-key"}, clear=False):
+            build_chat_client(s)
+        self.assertEqual(cap.last_kwargs()["api_key"], "env-kimi-key")
+
 
 if __name__ == "__main__":
     unittest.main()

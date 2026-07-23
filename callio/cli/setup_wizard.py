@@ -93,11 +93,14 @@ def _load_existing_env() -> dict[str, str]:
 
 def _setup_llm(config: dict[str, str]) -> None:
     _print_header("LLM Provider Configuration")
-    print("Supported providers: ollama (local), openai, anthropic, gemini, openai_compatible\n")
+    print(
+        "Supported providers: ollama (local), openai, anthropic, gemini,\n"
+        "  deepseek, qwen, kimi, openai_compatible\n"
+    )
 
     provider = _ask_choice(
         "LLM provider",
-        ["ollama", "openai", "anthropic", "gemini", "openai_compatible"],
+        ["ollama", "openai", "anthropic", "gemini", "deepseek", "qwen", "kimi", "openai_compatible"],
         config.get("CALLIO_LLM_PROVIDER", "ollama"),
     )
     config["CALLIO_LLM_PROVIDER"] = provider
@@ -143,6 +146,30 @@ def _setup_llm(config: dict[str, str]) -> None:
         api_key = _ask("Gemini API key", config.get("CALLIO_LLM_API_KEY", ""))
         config["CALLIO_LLM_API_KEY"] = api_key
         model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "gemini-1.5-pro"))
+        config["CALLIO_LLM_MODEL"] = model
+
+    elif provider == "deepseek":
+        config.pop("CALLIO_LLM_BASE_URL", None)
+        print("  ℹ️  DeepSeek uses https://api.deepseek.com/v1 (set automatically)")
+        api_key = _ask("DeepSeek API key (DEEPSEEK_API_KEY)", config.get("CALLIO_LLM_API_KEY", ""))
+        config["CALLIO_LLM_API_KEY"] = api_key
+        model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "deepseek-chat"))
+        config["CALLIO_LLM_MODEL"] = model
+
+    elif provider == "qwen":
+        config.pop("CALLIO_LLM_BASE_URL", None)
+        print("  ℹ️  Qwen uses DashScope https://dashscope.aliyuncs.com/compatible-mode/v1 (set automatically)")
+        api_key = _ask("DashScope API key (DASHSCOPE_API_KEY)", config.get("CALLIO_LLM_API_KEY", ""))
+        config["CALLIO_LLM_API_KEY"] = api_key
+        model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "qwen-plus"))
+        config["CALLIO_LLM_MODEL"] = model
+
+    elif provider == "kimi":
+        config.pop("CALLIO_LLM_BASE_URL", None)
+        print("  ℹ️  Kimi (Moonshot AI) uses https://api.moonshot.cn/v1 (set automatically)")
+        api_key = _ask("Moonshot API key (MOONSHOT_API_KEY)", config.get("CALLIO_LLM_API_KEY", ""))
+        config["CALLIO_LLM_API_KEY"] = api_key
+        model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "moonshot-v1-8k"))
         config["CALLIO_LLM_MODEL"] = model
 
     elif provider == "openai_compatible":
