@@ -85,7 +85,7 @@ def _settings_missing_keys(settings_map: dict[str, str]) -> list[str]:
             missing.append("CALLIO_LLM_BASE_URL")
         if not settings_map.get("CALLIO_LLM_API_KEY", "").strip():
             missing.append("CALLIO_LLM_API_KEY")
-    elif provider in {"openai", "anthropic", "gemini"}:
+    elif provider in {"openai", "anthropic", "gemini", "deepseek", "qwen", "kimi"}:
         if not settings_map.get("CALLIO_LLM_API_KEY", "").strip():
             missing.append("CALLIO_LLM_API_KEY")
     return missing

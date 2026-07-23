@@ -21,6 +21,8 @@ Provider routing
 * ``openai_compatible`` — any OpenAI-compatible third-party API
   (Groq, Together, Mistral, DeepSeek, …).
   Requires ``CALLIO_LLM_BASE_URL`` and ``CALLIO_LLM_API_KEY``.
+* ``deepseek`` / ``qwen`` / ``kimi`` — OpenAI-compatible cloud presets
+    with built-in base URLs and provider-specific API key env fallbacks.
 """
 from __future__ import annotations
 
@@ -38,11 +40,20 @@ _PROVIDER_BASE_URLS: dict[str, str] = {
     "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
 }
 
+_OPENAI_COMPAT_CLOUD_BASE_URLS: dict[str, str] = {
+    "deepseek": "https://api.deepseek.com/v1",
+    "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "kimi": "https://api.moonshot.cn/v1",
+}
+
 # Environment variable names that store the API key for each provider
 _PROVIDER_KEY_ENVS: dict[str, str] = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "gemini": "GEMINI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "qwen": "DASHSCOPE_API_KEY",
+    "kimi": "MOONSHOT_API_KEY",
 }
 
 # Fallback env vars tried when the primary one is absent
@@ -93,7 +104,19 @@ def build_chat_client(settings: "Settings") -> AsyncOpenAI:
         base_url = explicit_base or _PROVIDER_BASE_URLS[provider]
         return AsyncOpenAI(base_url=base_url, api_key=api_key)
 
-    # "ollama", "openai_compatible", or unrecognised → generic compat path
+    if provider in _OPENAI_COMPAT_CLOUD_BASE_URLS:
+        api_key = _resolve_api_key(provider, explicit_key)
+        base_url = explicit_base or _OPENAI_COMPAT_CLOUD_BASE_URLS[provider]
+        return AsyncOpenAI(base_url=base_url, api_key=api_key)
+
+    if provider == "openai_compatible":
+        if not explicit_base:
+            raise ValueError(
+                "CALLIO_LLM_BASE_URL must be set when CALLIO_LLM_PROVIDER=openai_compatible"
+            )
+        return AsyncOpenAI(base_url=explicit_base, api_key=explicit_key)
+
+    # "ollama" or unrecognised → generic compat path
     base_url = explicit_base or settings.ollama_base_url
     api_key = explicit_key or ("ollama" if provider == "ollama" else "")
     return AsyncOpenAI(base_url=base_url, api_key=api_key)
