@@ -145,6 +145,14 @@ python app/cli/main.py dispatch --title "Plan tasks" --description "Break curren
 - Mobile: `/app/mobile/index.html`
 - Legacy alias: `/static/index.html`
 
+## Examples
+
+Ready-to-copy setup examples are available in `/examples`:
+
+- Local Ollama quick setup: `examples/01-local-ollama`
+- DeepSeek / Qwen / OpenAI provider configs: `examples/02-remote-llm-providers`
+- Efficient ASR/TTS configuration: `examples/03-efficient-voice`
+
 ## Configuration
 
 ### Key Environment Variables
