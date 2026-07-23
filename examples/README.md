@@ -8,14 +8,16 @@ This folder contains ready-to-copy examples for common LLM/voice setups.
 - Best for local/private development.
 - Trade-off: performance depends on local CPU/GPU/RAM.
 
-## 2) DeepSeek / Qwen / OpenAI provider setups
+## 2) DeepSeek / Qwen / Kimi / OpenAI provider setups
 
 - Path: `examples/02-remote-llm-providers/`
 - Includes:
   - `.env.openai.example`
   - `.env.deepseek.example`
   - `.env.qwen.example`
-- DeepSeek and Qwen are configured through `openai_compatible` mode.
+  - `.env.kimi.example`
+- DeepSeek, Qwen, and Kimi each have a dedicated provider name in `CALLIO_LLM_PROVIDER`
+  (`deepseek`, `qwen`, `kimi`) — the base URL is set automatically.
 
 ## 3) More efficient voice (ASR/TTS) setups
 

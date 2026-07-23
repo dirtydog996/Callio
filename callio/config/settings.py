@@ -36,8 +36,7 @@ class Settings:
     session_token_limit: int = 10
     voice_response_limit: int = 30
     llm_model: str = os.getenv("CALLIO_LLM_MODEL", "qwen2.5:7b")
-    # LLM provider: ollama (default) | openai | anthropic | gemini
-    #            | openai_compatible | deepseek | qwen | kimi
+    # LLM provider: ollama (default) | openai | anthropic | gemini | deepseek | qwen | kimi | openai_compatible
     llm_provider: str = os.getenv("CALLIO_LLM_PROVIDER", "ollama")
     # Generic API key for the selected LLM provider (e.g. OPENAI_API_KEY for openai).
     # Falls back to provider-specific env vars (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY).
