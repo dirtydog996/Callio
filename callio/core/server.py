@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.request import urlopen
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from callio.config.settings import Settings, get_settings
+from callio.config.settings import Settings, get_settings, reload_settings_from_env
 from callio.web import WEB_CLIENT_PATH
 from callio.core.database import Database
 from callio.core.memory import MemoryHub
@@ -87,6 +89,42 @@ def _settings_missing_keys(settings_map: dict[str, str]) -> list[str]:
         if not settings_map.get("CALLIO_LLM_API_KEY", "").strip():
             missing.append("CALLIO_LLM_API_KEY")
     return missing
+
+
+def _ollama_tags_url(base_url: str) -> str:
+    normalized = (base_url or "http://localhost:11434/v1").strip().rstrip("/")
+    if normalized.endswith("/v1"):
+        normalized = normalized[:-3]
+    return f"{normalized}/api/tags"
+
+
+def _fetch_ollama_models(base_url: str) -> tuple[list[str], str | None]:
+    url = _ollama_tags_url(base_url)
+    try:
+        with urlopen(url, timeout=2.5) as response:  # nosec B310 - user-configured local/service URL
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        return [], str(exc)
+    models = payload.get("models", []) if isinstance(payload, dict) else []
+    names = sorted({str(item.get("name", "")).strip() for item in models if isinstance(item, dict) and item.get("name")})
+    return names, None
+
+
+def _ollama_error_hint(base_url: str, error: str | None) -> str:
+    if not error:
+        return ""
+    normalized = (base_url or "").strip().lower()
+    if "localhost" in normalized or "127.0.0.1" in normalized:
+        return (
+            "This app is running inside a container or remote workspace. "
+            "In that environment, localhost points to the container itself, not your local machine. "
+            "If Ollama is running on your computer, use a host-reachable address or rely on browser-side local detection."
+        )
+    if "connection refused" in error.lower():
+        return "The target address was reached, but nothing is listening on port 11434. Start Ollama or verify the port."
+    if "timed out" in error.lower():
+        return "The address did not respond in time. Check firewall rules, routing, or whether the host is reachable from this environment."
+    return "Verify the base URL and confirm that the Ollama API is reachable from the current runtime environment."
 
 
 class TodoItem(BaseModel):
@@ -223,6 +261,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if key in _SETTINGS_KEYS
         }
         _save_runtime_settings_map(payload)
+        refreshed_settings = reload_settings_from_env()
+        app.state.settings = refreshed_settings
         settings_map = _load_runtime_settings_map()
         missing = _settings_missing_keys(settings_map)
         return {
@@ -230,7 +270,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "settings": settings_map,
             "configured": not missing,
             "missing": missing,
-            "restart_required": True,
+            "restart_required": False,
+        }
+
+    @app.get("/api/v1/settings/ollama-models")
+    async def list_ollama_models(base_url: str = "") -> dict[str, Any]:
+        effective_base = (base_url or "http://localhost:11434/v1").strip()
+        models, error = _fetch_ollama_models(effective_base)
+        return {
+            "base_url": effective_base,
+            "models": models,
+            "error": error,
+            "hint": _ollama_error_hint(effective_base, error),
+            "reachable": error is None,
         }
 
     @app.get("/api/v1/tasks")
@@ -247,6 +299,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/sessions")
     async def list_sessions() -> dict[str, Any]:
         return {"items": database.list_sessions()}
+
+    @app.delete("/api/v1/sessions")
+    async def clear_sessions() -> dict[str, Any]:
+        cleared = database.clear_all_sessions()
+        memory_hub.clear_all_session_memory()
+        await manager.broadcast_status({
+            "event": "SESSIONS_CLEARED",
+            "counts": cleared,
+        })
+        return {
+            "status": "cleared",
+            "counts": cleared,
+        }
 
     @app.get("/api/v1/tasks/{node_id}/runs")
     async def get_task_runs(node_id: str) -> dict[str, Any]:

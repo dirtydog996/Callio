@@ -147,7 +147,7 @@ def _create_chatt_tts(settings: Settings, *, sample_rate: int) -> TTSService:
                 sample_rate=sample_rate,
                 settings=TTSSettings(model="ChatTTS", voice=None, language=Language.ZH),
             )
-            self._settings = settings
+            self._runtime_settings = settings
 
         async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame | None, None]:
             if not text.strip():
@@ -155,7 +155,7 @@ def _create_chatt_tts(settings: Settings, *, sample_rate: int) -> TTSService:
                 return
 
             try:
-                pcm = await asyncio.to_thread(synthesize_chatt, text, self._settings)
+                pcm = await asyncio.to_thread(synthesize_chatt, text, self._runtime_settings)
                 if not pcm:
                     yield None
                     return

@@ -326,6 +326,29 @@ class Database:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def clear_all_sessions(self) -> dict[str, int]:
+        with self.connection() as conn:
+            session_count = conn.execute("SELECT COUNT(*) AS cnt FROM sessions").fetchone()
+            node_count = conn.execute("SELECT COUNT(*) AS cnt FROM spec_nodes").fetchone()
+            event_count = conn.execute("SELECT COUNT(*) AS cnt FROM session_events").fetchone()
+            run_count = conn.execute("SELECT COUNT(*) AS cnt FROM task_runs").fetchone()
+            queue_count = conn.execute("SELECT COUNT(*) AS cnt FROM task_queue").fetchone()
+
+            conn.execute("DELETE FROM task_queue")
+            conn.execute("DELETE FROM task_runs")
+            conn.execute("DELETE FROM session_events")
+            conn.execute("DELETE FROM spec_nodes")
+            conn.execute("DELETE FROM sessions")
+            conn.commit()
+
+        return {
+            "sessions": int(session_count["cnt"]) if session_count else 0,
+            "tasks": int(node_count["cnt"]) if node_count else 0,
+            "events": int(event_count["cnt"]) if event_count else 0,
+            "runs": int(run_count["cnt"]) if run_count else 0,
+            "queue": int(queue_count["cnt"]) if queue_count else 0,
+        }
+
     def insert_session_event(self, event_id: str, session_id: str, kind: str, payload: str) -> None:
         with self.connection() as conn:
             conn.execute(

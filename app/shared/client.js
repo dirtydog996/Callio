@@ -58,6 +58,7 @@
             at: 0,
         },
         settingsReady: loadStoredSettingsReady(),
+        ollamaModels: [],
     };
 
     const elements = {
@@ -67,6 +68,7 @@
         tasks: document.getElementById("tasks"),
         liveReport: document.getElementById("liveReport"),
         sessions: document.getElementById("sessionList"),
+        clearSessionsBtn: document.getElementById("clearSessionsBtn"),
         startBtn: document.getElementById("startBtn"),
         stopBtn: document.getElementById("stopBtn"),
         refreshBtn: document.getElementById("refreshBtn"),
@@ -90,6 +92,12 @@
         settingTtsBackend: document.getElementById("settingTtsBackend"),
         settingHost: document.getElementById("settingHost"),
         settingPort: document.getElementById("settingPort"),
+        settingOllamaModelSelect: document.getElementById("settingOllamaModelSelect"),
+        refreshOllamaModelsBtn: document.getElementById("refreshOllamaModelsBtn"),
+        ollamaModelGroup: document.getElementById("ollamaModelGroup"),
+        ollamaStatus: document.getElementById("ollamaStatus"),
+        providerHint: document.getElementById("providerHint"),
+        saveSettingsStatus: document.getElementById("saveSettingsStatus"),
     };
 
     // ---- Toast notification system ----
@@ -266,12 +274,144 @@
 
     function openSettingsModal() {
         if (!elements.settingsModal) return;
+        elements.settingsModal.classList.add("is-open");
+        elements.settingsModal.removeAttribute("hidden");
         elements.settingsModal.hidden = false;
+        setSaveSettingsStatus("Review settings and save when you are ready.", "info");
+        loadOllamaModels().catch(() => {});
     }
 
     function closeSettingsModal() {
         if (!elements.settingsModal) return;
+        elements.settingsModal.classList.remove("is-open");
+        elements.settingsModal.setAttribute("hidden", "hidden");
         elements.settingsModal.hidden = true;
+    }
+
+    function applyProviderSpecificUI() {
+        const provider = elements.settingLlmProvider?.value || "ollama";
+        document.querySelectorAll("[data-provider-scope]").forEach((node) => {
+            const scopes = (node.getAttribute("data-provider-scope") || "").split(/\s+/).filter(Boolean);
+            const shouldShow = scopes.includes(provider) || (scopes.includes("remote-auth") && provider !== "ollama");
+            node.hidden = !shouldShow;
+        });
+        if (!elements.ollamaModelGroup) return;
+        const showOllama = provider === "ollama";
+        elements.ollamaModelGroup.hidden = !showOllama;
+        if (elements.providerHint) {
+            elements.providerHint.className = "field-note info field-span-2";
+            if (provider === "ollama") {
+                elements.providerHint.textContent = "Ollama uses a local base URL and can auto-discover installed models from the running service.";
+            } else if (provider === "openai_compatible") {
+                elements.providerHint.textContent = "OpenAI-compatible providers usually require both a base URL and an API key.";
+            } else {
+                elements.providerHint.textContent = "Hosted providers usually require an API key and a provider-specific model name.";
+            }
+        }
+        if (!showOllama && elements.ollamaStatus) {
+            elements.ollamaStatus.className = "field-note";
+            elements.ollamaStatus.textContent = "Ollama model discovery is only used when the provider is set to ollama.";
+        }
+    }
+
+    function setSaveSettingsStatus(message, kind) {
+        if (!elements.saveSettingsStatus) return;
+        elements.saveSettingsStatus.className = `field-note modal-status ${kind || "info"}`.trim();
+        elements.saveSettingsStatus.textContent = message;
+    }
+
+    function setOllamaStatus(message, kind) {
+        if (!elements.ollamaStatus) return;
+        elements.ollamaStatus.className = `field-note ${kind || ""}`.trim();
+        elements.ollamaStatus.textContent = message;
+    }
+
+    async function loadOllamaModelsFromBrowser(baseUrl) {
+        const normalized = (baseUrl || "http://localhost:11434/v1").trim().replace(/\/$/, "");
+        const tagsUrl = normalized.endsWith("/v1")
+            ? `${normalized.slice(0, -3)}/api/tags`
+            : `${normalized}/api/tags`;
+        const response = await fetch(tagsUrl, { method: "GET" });
+        if (!response.ok) {
+            throw new Error(`${response.status} ${response.statusText}`);
+        }
+        const payload = await response.json();
+        const models = Array.isArray(payload?.models)
+            ? payload.models
+                .map((item) => item && item.name ? String(item.name).trim() : "")
+                .filter(Boolean)
+            : [];
+        return Array.from(new Set(models)).sort();
+    }
+
+    function fillOllamaModelSelect(models, selectedModel) {
+        if (!elements.settingOllamaModelSelect) return;
+        const normalized = Array.isArray(models) ? models : [];
+        elements.settingOllamaModelSelect.innerHTML = "";
+
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = normalized.length
+            ? "Select an installed model"
+            : "No installed model found";
+        elements.settingOllamaModelSelect.appendChild(placeholder);
+
+        normalized.forEach((name) => {
+            const option = document.createElement("option");
+            option.value = name;
+            option.textContent = name;
+            elements.settingOllamaModelSelect.appendChild(option);
+        });
+
+        if (selectedModel && normalized.includes(selectedModel)) {
+            elements.settingOllamaModelSelect.value = selectedModel;
+        } else {
+            elements.settingOllamaModelSelect.value = "";
+        }
+    }
+
+    async function loadOllamaModels() {
+        if (mode !== "web" || !elements.settingOllamaModelSelect) return;
+        const provider = elements.settingLlmProvider?.value || "ollama";
+        if (provider !== "ollama") {
+            applyProviderSpecificUI();
+            return;
+        }
+
+        const rawBaseUrl = elements.settingOllamaBaseUrl?.value.trim() || "";
+        const baseUrl = encodeURIComponent(rawBaseUrl);
+        elements.settingOllamaModelSelect.innerHTML = '<option value="">Loading installed models...</option>';
+        setOllamaStatus("Checking Ollama service and installed models...", "");
+        try {
+            const data = await requestJson(`/api/v1/settings/ollama-models?base_url=${baseUrl}`);
+            state.ollamaModels = data.models || [];
+            fillOllamaModelSelect(state.ollamaModels, elements.settingLlmModel?.value.trim() || "");
+            if (data.reachable) {
+                if (state.ollamaModels.length) {
+                    setOllamaStatus(`Ollama is reachable at ${data.base_url}. Found ${state.ollamaModels.length} installed model${state.ollamaModels.length > 1 ? "s" : ""}.`, "success");
+                } else {
+                    setOllamaStatus(`Ollama is reachable at ${data.base_url}, but no installed models were returned. Run 'ollama list' or pull a model first.`, "warning");
+                }
+            } else {
+                try {
+                    const browserModels = await loadOllamaModelsFromBrowser(rawBaseUrl || "http://localhost:11434/v1");
+                    state.ollamaModels = browserModels;
+                    fillOllamaModelSelect(state.ollamaModels, elements.settingLlmModel?.value.trim() || "");
+                    if (browserModels.length) {
+                        setOllamaStatus(`Server-side detection could not reach Ollama, but your browser reached ${rawBaseUrl || "http://localhost:11434/v1"} and found ${browserModels.length} installed model${browserModels.length > 1 ? "s" : ""}. This usually means Ollama is running on your local machine while the app runs in a container or remote workspace.`, "success");
+                        return;
+                    }
+                } catch (_) {
+                    // Ignore browser fallback errors and show the server-side diagnostic below.
+                }
+                setOllamaStatus(`Ollama is not reachable at ${data.base_url}. ${data.hint ? `${data.hint} ` : ""}Error: ${data.error || "unknown error"}`, "danger");
+                showToast(`Ollama is not reachable: ${data.error || "unknown error"}`, "warning", 5000);
+            }
+        } catch (error) {
+            fillOllamaModelSelect([], "");
+            setOllamaStatus(`Failed to load Ollama models. Check whether the service is running and whether the base URL is correct. Error: ${error.message}`, "danger");
+            showToast(`Failed to load Ollama models: ${error.message}`, "warning", 5000);
+        }
     }
 
     function collectSettingsPayload() {
@@ -299,6 +439,8 @@
         if (elements.settingTtsBackend) elements.settingTtsBackend.value = data.CALLIO_TTS_BACKEND || "chatt";
         if (elements.settingHost) elements.settingHost.value = data.CALLIO_HOST || "0.0.0.0";
         if (elements.settingPort) elements.settingPort.value = data.CALLIO_PORT || "8000";
+        if (elements.settingOllamaModelSelect) elements.settingOllamaModelSelect.value = data.CALLIO_LLM_MODEL || "";
+        applyProviderSpecificUI();
     }
 
     function normalizeDisplayText(value) {
@@ -361,6 +503,16 @@
             state.assistantDraft.at = Date.now();
         }
         addLiveReport(role, normalizedText, label, { stream });
+    }
+
+    function presentVoiceError(payload) {
+        const title = payload && payload.title ? payload.title : "Voice issue";
+        const text = payload && payload.text ? payload.text : "The voice request failed.";
+        resetAssistantDraft();
+        stopDownlinkPlayback();
+        addMessage("error", `${title}\n${text}`, "Voice Issue");
+        setStatus("danger", title, text);
+        showToast(title, "danger", 5000);
     }
 
     function resetMessages() {
@@ -435,6 +587,10 @@
             state.settingsReady = Boolean(data.configured);
             storeSettingsReady(state.settingsReady);
             applySettingsReadyUI();
+            setSaveSettingsStatus(state.settingsReady
+                ? "Current settings look complete. Save again after making changes."
+                : "Current settings are incomplete. Fill the required fields and save again.", state.settingsReady ? "success" : "warning");
+            await loadOllamaModels();
         } catch (error) {
             console.warn("Failed to load setup settings", error);
             state.settingsReady = loadStoredSettingsReady();
@@ -445,19 +601,33 @@
     async function saveSetupSettings() {
         if (mode !== "web") return;
         const payload = collectSettingsPayload();
-        const data = await requestJson("/api/v1/settings", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ settings: payload }),
-        });
-        state.settingsReady = Boolean(data.configured);
-        storeSettingsReady(state.settingsReady);
-        applySettingsReadyUI();
-        if (state.settingsReady) {
-            closeSettingsModal();
-            showToast("Settings saved. You can start conversation now.", "success");
-        } else {
-            showToast(`Settings incomplete: ${(data.missing || []).join(", ") || "check required fields"}`, "warning", 5000);
+        elements.saveSettingsBtn?.classList.add("is-loading");
+        if (elements.saveSettingsBtn) {
+            elements.saveSettingsBtn.disabled = true;
+        }
+        setSaveSettingsStatus("Saving settings to the server .env file...", "info");
+        try {
+            const data = await requestJson("/api/v1/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ settings: payload }),
+            });
+            state.settingsReady = Boolean(data.configured);
+            storeSettingsReady(state.settingsReady);
+            applySettingsReadyUI();
+            if (state.settingsReady) {
+                setSaveSettingsStatus("Settings saved successfully. Restart the service to fully apply provider-level changes.", "success");
+                closeSettingsModal();
+                showToast("Settings saved. You can start conversation now.", "success");
+            } else {
+                setSaveSettingsStatus(`Settings saved, but some required fields are still missing: ${(data.missing || []).join(", ") || "unknown fields"}.`, "warning");
+                showToast(`Settings incomplete: ${(data.missing || []).join(", ") || "check required fields"}`, "warning", 5000);
+            }
+        } finally {
+            elements.saveSettingsBtn?.classList.remove("is-loading");
+            if (elements.saveSettingsBtn) {
+                elements.saveSettingsBtn.disabled = false;
+            }
         }
     }
 
@@ -504,6 +674,25 @@
         } catch (error) {
             console.warn("Failed to load sessions", error);
         }
+    }
+
+    async function clearAllSessions() {
+        if (state.isRecording) {
+            showToast("Stop the current voice session before clearing history.", "warning", 4500);
+            return;
+        }
+        if (!window.confirm("Clear all saved conversations and related task history?")) {
+            return;
+        }
+        const data = await requestJson("/api/v1/sessions", { method: "DELETE" });
+        setSelectedSession(null);
+        resetMessages();
+        resetLiveReport();
+        state.taskNodes.clear();
+        elements.tasks.innerHTML = "<p class='empty-state'>Background tasks and status updates appear here after you start a conversation.</p>";
+        await loadSessionOptions();
+        setStatus("success", "History cleared", "Saved conversations and task history were removed.");
+        showToast(`Cleared ${data.counts?.sessions || 0} conversation${(data.counts?.sessions || 0) === 1 ? "" : "s"}.`, "success", 4000);
     }
 
     function renderStoredTranscript(transcript) {
@@ -874,6 +1063,8 @@
                 addMessage("user", data.text);
             } else if (data.type === "assistant") {
                 addMessage("assistant", data.text, undefined, { stream: true });
+            } else if (data.type === "error") {
+                presentVoiceError(data);
             } else if (data.type === "interrupt") {
                 resetAssistantDraft();
                 stopDownlinkPlayback();
@@ -1030,9 +1221,38 @@
 
     function bindSettingsWizard() {
         if (mode !== "web") return;
+        elements.settingLlmProvider?.addEventListener("change", async () => {
+            applyProviderSpecificUI();
+            await loadOllamaModels();
+        });
+        elements.settingOllamaBaseUrl?.addEventListener("change", async () => {
+            await loadOllamaModels();
+        });
+        elements.settingOllamaModelSelect?.addEventListener("change", () => {
+            const value = elements.settingOllamaModelSelect.value || "";
+            if (value && elements.settingLlmModel) {
+                elements.settingLlmModel.value = value;
+            }
+        });
+        elements.refreshOllamaModelsBtn?.addEventListener("click", async () => {
+            await loadOllamaModels();
+        });
+        document.querySelectorAll("#settingsModal input, #settingsModal select").forEach((node) => {
+            node.addEventListener("input", () => {
+                setSaveSettingsStatus("You have unsaved changes.", "info");
+            });
+            node.addEventListener("change", () => {
+                setSaveSettingsStatus("You have unsaved changes.", "info");
+            });
+        });
         elements.openSettingsBtn?.addEventListener("click", openSettingsModal);
         elements.openSettingsInlineBtn?.addEventListener("click", openSettingsModal);
         elements.closeSettingsBtn?.addEventListener("click", closeSettingsModal);
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && elements.settingsModal && !elements.settingsModal.hidden) {
+                closeSettingsModal();
+            }
+        });
         elements.settingsModal?.addEventListener("click", (event) => {
             if (event.target === elements.settingsModal) {
                 closeSettingsModal();
@@ -1055,6 +1275,13 @@
     });
     elements.confirmAllBtn.addEventListener("click", async () => {
         await postTaskAction("confirm", [], true);
+    });
+    elements.clearSessionsBtn?.addEventListener("click", async () => {
+        try {
+            await clearAllSessions();
+        } catch (error) {
+            showToast(`Clear history failed: ${error.message}`, "danger", 5000);
+        }
     });
     elements.dispatchTaskBtn.addEventListener("click", async () => {
         try {

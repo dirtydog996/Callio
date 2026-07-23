@@ -22,6 +22,30 @@ from callio.voice.web_tts import create_tts
 from callio.voice.whisper_loader import create_whisper_stt, preload_whisper, wait_for_whisper
 
 
+def _summarize_voice_error(message: str) -> tuple[str, str]:
+    text = (message or "").strip()
+    lower = text.lower()
+    if "does not support tools" in lower:
+        return (
+            "Model does not support tool calling",
+            "The selected Ollama model cannot use background task tools. Choose a tools-capable model or disable task-oriented voice workflows.",
+        )
+    if "not found" in lower and "model" in lower:
+        return (
+            "Model not found",
+            "The selected model is not installed in Ollama. Pick a model from the installed list or pull it first.",
+        )
+    if "connection refused" in lower or "timed out" in lower:
+        return (
+            "LLM service unreachable",
+            "Callio could not reach the configured LLM service. Check whether Ollama or the provider endpoint is running and reachable.",
+        )
+    return (
+        "Voice request failed",
+        "The model request failed. Review the selected provider, model, and runtime availability, then try again.",
+    )
+
+
 def _create_stt(settings: Settings):
     """Return the appropriate STT service based on *stt_backend* setting."""
     backend = (settings.stt_backend or "whisper").strip().lower()
@@ -43,17 +67,21 @@ async def on_user_speech_start(transport, pipeline) -> None:
 def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> None:
     settings = settings or get_settings()
 
+    def _runtime_settings() -> Settings:
+        return getattr(app.state, "settings", settings)
+
     if not hasattr(app.state, "voice_runners"):
         app.state.voice_runners = set()
 
     @app.on_event("startup")
     async def preload_voice_models_on_startup() -> None:
-        backend = (settings.stt_backend or "whisper").strip().lower()
+        runtime_settings = _runtime_settings()
+        backend = (runtime_settings.stt_backend or "whisper").strip().lower()
         if backend == "sensevoice":
             from callio.voice.funasr_loader import preload_funasr
-            await asyncio.gather(preload_funasr(settings), preload_tts(settings))
+            await asyncio.gather(preload_funasr(runtime_settings), preload_tts(runtime_settings))
         else:
-            await asyncio.gather(preload_whisper(settings), preload_tts(settings))
+            await asyncio.gather(preload_whisper(runtime_settings), preload_tts(runtime_settings))
 
     @app.on_event("shutdown")
     async def shutdown_voice_sessions() -> None:
@@ -68,6 +96,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket) -> None:
+        runtime_settings = _runtime_settings()
         orchestrator = getattr(app.state, "orchestrator", None)
         memory_hub = getattr(app.state, "memory_hub", None)
         connection_id = id(websocket)
@@ -82,6 +111,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             from pipecat.audio.vad.silero import SileroVADAnalyzer
             from pipecat.audio.vad.vad_analyzer import VADParams
             from pipecat.frames.frames import (
+                ErrorFrame,
                 Frame,
                 InputAudioRawFrame,
                 InterruptionFrame,
@@ -159,6 +189,17 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 try:
                     if isinstance(frame, InterruptionFrame):
                         await self._websocket.send_text(json.dumps({"type": "interrupt"}))
+                    elif self._role == "assistant" and isinstance(frame, ErrorFrame):
+                        detail = getattr(frame, "error", "") or str(frame)
+                        title, summary = _summarize_voice_error(detail)
+                        await self._websocket.send_text(
+                            json.dumps({
+                                "type": "error",
+                                "title": title,
+                                "text": summary,
+                                "detail": detail,
+                            }, ensure_ascii=False)
+                        )
                     elif self._role == "user" and isinstance(frame, TranscriptionFrame) and frame.text:
                         await self._websocket.send_text(
                             json.dumps({"type": "transcription", "text": frame.text}, ensure_ascii=False)
@@ -172,12 +213,12 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 await self.push_frame(frame, direction)
 
         await websocket.accept()
-        backend = (settings.stt_backend or "whisper").strip().lower()
+        backend = (runtime_settings.stt_backend or "whisper").strip().lower()
         if backend == "sensevoice":
             from callio.voice.funasr_loader import wait_for_funasr
-            await asyncio.gather(wait_for_funasr(settings), wait_for_tts(settings))
+            await asyncio.gather(wait_for_funasr(runtime_settings), wait_for_tts(runtime_settings))
         else:
-            await asyncio.gather(wait_for_whisper(settings), wait_for_tts(settings))
+            await asyncio.gather(wait_for_whisper(runtime_settings), wait_for_tts(runtime_settings))
 
         if orchestrator is not None:
             resume_session_id = websocket.query_params.get("resume_session_id")
@@ -213,30 +254,30 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             websocket,
             FastAPIWebsocketParams(
                 audio_in_enabled=True,
-                audio_in_sample_rate=settings.audio_in_sample_rate,
+                audio_in_sample_rate=runtime_settings.audio_in_sample_rate,
                 audio_out_enabled=True,
-                audio_out_sample_rate=settings.audio_out_sample_rate,
-                serializer=RawPCMSerializer(sample_rate=settings.audio_in_sample_rate),
+                audio_out_sample_rate=runtime_settings.audio_out_sample_rate,
+                serializer=RawPCMSerializer(sample_rate=runtime_settings.audio_in_sample_rate),
             ),
         )
 
         vad = VADProcessor(
             vad_analyzer=SileroVADAnalyzer(
-                params=VADParams(start_secs=0.2, stop_secs=settings.vad_stop_secs, min_volume=0.2)
+                params=VADParams(start_secs=0.2, stop_secs=runtime_settings.vad_stop_secs, min_volume=0.2)
             )
         )
 
-        stt = _create_stt(settings)
+        stt = _create_stt(runtime_settings)
 
-        llm = build_voice_llm_service(settings)
+        llm = build_voice_llm_service(runtime_settings)
 
-        tts = create_tts(settings)
+        tts = create_tts(runtime_settings)
 
         progress_block = ""
         memory_block = ""
         if orchestrator is not None and session_id:
             progress_block = orchestrator.progress.build_context_block(session_id)
-        if settings.memory_inject and memory_hub is not None:
+        if runtime_settings.memory_inject and memory_hub is not None:
             database = getattr(app.state, "database", None)
             if database is not None:
                 memory_block = build_memory_block(memory_hub, database)
@@ -262,7 +303,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             messages=[{
                 "role": "system",
                 "content": build_system_prompt(
-                    settings.voice_response_limit,
+                    runtime_settings.voice_response_limit,
                     progress_block=progress_block,
                     memory_block=memory_block,
                     resume_block=resume_block,
@@ -281,7 +322,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
         ]
         if orchestrator is not None and session_id:
             processors.append(
-                SessionHook(orchestrator, session_id, context, settings, memory_hub=memory_hub)
+                SessionHook(orchestrator, session_id, context, runtime_settings, memory_hub=memory_hub)
             )
         processors.extend([
             context_aggregator.user(),
@@ -319,7 +360,7 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                 await orchestrator.sessions.finalize(connection_id, transcript=transcript)
                 session_row = orchestrator.database.get_session(session_id) or {}
                 notify_session_finished(
-                    settings,
+                    runtime_settings,
                     session_id=session_id,
                     session_title=str(session_row.get("title", session_ctx.title if session_ctx else "")),
                     transcript=transcript,

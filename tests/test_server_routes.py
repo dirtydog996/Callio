@@ -29,6 +29,7 @@ class ServerRouteTests(unittest.TestCase):
             shared_dir=str(ROOT / "app" / "shared"),
         )
         self.client = TestClient(create_app(self.settings))
+        self.client.app.state.database.initialize()
 
     def tearDown(self) -> None:
         self.client.close()
@@ -49,6 +50,28 @@ class ServerRouteTests(unittest.TestCase):
         self.assertIn("Mobile Workspace", mobile_response.text)
         self.assertEqual(shared_response.status_code, 200)
         self.assertIn("startSession", shared_response.text)
+
+    def test_clear_all_sessions_route_removes_stored_history(self) -> None:
+        create_response = self.client.post("/api/v1/sessions", json={
+            "session_id": "session-1",
+            "title": "Demo Session",
+            "transcript": "user: hello",
+            "summary": "demo",
+        })
+        self.assertEqual(create_response.status_code, 200)
+
+        before = self.client.get("/api/v1/sessions")
+        self.assertEqual(before.status_code, 200)
+        self.assertEqual(len(before.json()["items"]), 1)
+
+        clear_response = self.client.delete("/api/v1/sessions")
+        self.assertEqual(clear_response.status_code, 200)
+        self.assertEqual(clear_response.json()["status"], "cleared")
+        self.assertEqual(clear_response.json()["counts"]["sessions"], 1)
+
+        after = self.client.get("/api/v1/sessions")
+        self.assertEqual(after.status_code, 200)
+        self.assertEqual(after.json()["items"], [])
 
 
 if __name__ == "__main__":

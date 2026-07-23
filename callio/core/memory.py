@@ -71,3 +71,12 @@ class MemoryHub:
             ranked.append((len(query_terms & content_terms), entry))
         ranked.sort(key=lambda item: item[0], reverse=True)
         return [entry for _, entry in ranked[:limit] if _ > 0 or not query_terms]
+
+    def clear_all_session_memory(self) -> None:
+        self._working_memory.clear()
+        self._semantic_fallback.clear()
+        if self._semantic_collection is not None:
+            try:
+                self._semantic_collection.delete(where={"kind": "session"})
+            except Exception:
+                pass

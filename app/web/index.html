@@ -13,10 +13,10 @@
             <strong>Voice Workspace</strong>
         </div>
         <nav class="topbar-nav" aria-label="Quick Navigation">
-            <button type="button" class="ghost-btn" data-nav-target="sessionList">会话</button>
-            <button type="button" class="ghost-btn" data-nav-target="messages">对话</button>
-            <button type="button" class="ghost-btn" data-nav-target="tasks">任务</button>
-            <button id="openSettingsBtn" type="button" class="primary-btn">设置向导</button>
+            <button type="button" class="ghost-btn" data-nav-target="sessionList">Sessions</button>
+            <button type="button" class="ghost-btn" data-nav-target="messages">Chat</button>
+            <button type="button" class="ghost-btn" data-nav-target="tasks">Tasks</button>
+            <button id="openSettingsBtn" type="button" class="primary-btn">Settings Wizard</button>
         </nav>
     </header>
     <div class="shell">
@@ -27,7 +27,10 @@
                 <p>Manage session history on the left, focus on the conversation in the center, and track background tasks on the right.</p>
             </div>
             <div>
-                <div class="section-title">Session History</div>
+                <div class="section-title section-title-row">
+                    <span>Session History</span>
+                    <button id="clearSessionsBtn" type="button" class="ghost-btn subtle-btn">Clear All</button>
+                </div>
                 <div id="sessionList" class="session-list"></div>
             </div>
             <div>
@@ -55,9 +58,9 @@
                 </div>
             </div>
             <div id="setupGate" class="setup-gate">
-                <strong>请先完成设置向导</strong>
-                <p>先配置 LLM / Ollama 模型等运行参数，保存后即可开始对话。</p>
-                <button id="openSettingsInlineBtn" type="button" class="primary-btn">打开设置</button>
+                <strong>Complete setup before starting chat</strong>
+                <p>Configure LLM and runtime options first, then save to unlock voice chat.</p>
+                <button id="openSettingsInlineBtn" type="button" class="primary-btn">Open Settings</button>
             </div>
             <div class="message-stream" id="messages">
                 <div class="message assistant">
@@ -108,56 +111,88 @@
     <div id="settingsModal" class="modal-overlay" hidden>
         <div class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
             <div class="modal-header">
-                <h2 id="settingsTitle" class="modal-title">设置向导</h2>
-                <button id="closeSettingsBtn" type="button" class="ghost-btn">关闭</button>
+                <h2 id="settingsTitle" class="modal-title">Settings Wizard</h2>
+                <button id="closeSettingsBtn" type="button" class="ghost-btn">Close</button>
             </div>
-            <div class="modal-meta">保存后会写入服务端 `.env`。已保存即可开始对话，建议重启服务使配置完全生效。</div>
-            <div class="settings-grid">
-                <label>LLM Provider
-                    <select id="settingLlmProvider">
-                        <option value="ollama">ollama</option>
-                        <option value="openai">openai</option>
-                        <option value="anthropic">anthropic</option>
-                        <option value="gemini">gemini</option>
-                        <option value="openai_compatible">openai_compatible</option>
-                    </select>
-                </label>
-                <label>LLM Model
-                    <input id="settingLlmModel" type="text" placeholder="qwen2.5:7b">
-                </label>
-                <label>LLM API Key
-                    <input id="settingLlmApiKey" type="password" placeholder="可留空（若服务环境变量已提供）">
-                </label>
-                <label>LLM Base URL
-                    <input id="settingLlmBaseUrl" type="text" placeholder="openai_compatible 常用">
-                </label>
-                <label>Ollama Base URL
-                    <input id="settingOllamaBaseUrl" type="text" placeholder="http://localhost:11434/v1">
-                </label>
-                <label>STT Backend
-                    <select id="settingSttBackend">
-                        <option value="whisper">whisper</option>
-                        <option value="sensevoice">sensevoice</option>
-                    </select>
-                </label>
-                <label>TTS Backend
-                    <select id="settingTtsBackend">
-                        <option value="chatt">chatt</option>
-                        <option value="say">say</option>
-                        <option value="edge">edge</option>
-                        <option value="cosyvoice">cosyvoice</option>
-                        <option value="fish">fish</option>
-                    </select>
-                </label>
-                <label>Host
-                    <input id="settingHost" type="text" placeholder="0.0.0.0">
-                </label>
-                <label>Port
-                    <input id="settingPort" type="number" min="1" max="65535" placeholder="8000">
-                </label>
+            <div class="modal-meta">Settings are written to the server .env file. Save and restart the service to fully apply provider-level changes.</div>
+            <div class="settings-layout">
+                <section class="settings-card">
+                    <div class="settings-card-title">Language Model</div>
+                    <div class="settings-grid">
+                        <label class="settings-field">
+                            <span class="field-label">LLM Provider</span>
+                            <select id="settingLlmProvider">
+                                <option value="ollama">ollama</option>
+                                <option value="openai">openai</option>
+                                <option value="anthropic">anthropic</option>
+                                <option value="gemini">gemini</option>
+                                <option value="openai_compatible">openai_compatible</option>
+                            </select>
+                        </label>
+                        <label class="settings-field">
+                            <span class="field-label">LLM Model</span>
+                            <input id="settingLlmModel" type="text" placeholder="qwen2.5:7b">
+                        </label>
+                        <div id="ollamaModelGroup" class="settings-field field-span-2">
+                            <span class="field-label">Installed Ollama Models</span>
+                            <div class="inline-row">
+                                <select id="settingOllamaModelSelect">
+                                    <option value="">Loading installed models...</option>
+                                </select>
+                                <button id="refreshOllamaModelsBtn" type="button" class="ghost-btn inline-btn">Refresh</button>
+                            </div>
+                            <div id="ollamaStatus" class="field-note">Checking Ollama service status...</div>
+                        </div>
+                        <label class="settings-field" data-provider-scope="remote-auth openai anthropic gemini openai_compatible">
+                            <span class="field-label">LLM API Key</span>
+                            <input id="settingLlmApiKey" type="password" placeholder="Optional if already provided in server env">
+                        </label>
+                        <label class="settings-field" data-provider-scope="openai_compatible">
+                            <span class="field-label">LLM Base URL</span>
+                            <input id="settingLlmBaseUrl" type="text" placeholder="Common for openai_compatible provider">
+                        </label>
+                        <label class="settings-field field-span-2" data-provider-scope="ollama">
+                            <span class="field-label">Ollama Base URL</span>
+                            <input id="settingOllamaBaseUrl" type="text" placeholder="http://localhost:11434/v1">
+                        </label>
+                        <div id="providerHint" class="field-note field-span-2">Provider-specific fields update automatically when you switch providers.</div>
+                    </div>
+                </section>
+
+                <section class="settings-card">
+                    <div class="settings-card-title">Voice Runtime</div>
+                    <div class="settings-grid">
+                        <label class="settings-field">
+                            <span class="field-label">STT Backend</span>
+                            <select id="settingSttBackend">
+                                <option value="whisper">whisper</option>
+                                <option value="sensevoice">sensevoice</option>
+                            </select>
+                        </label>
+                        <label class="settings-field">
+                            <span class="field-label">TTS Backend</span>
+                            <select id="settingTtsBackend">
+                                <option value="chatt">chatt</option>
+                                <option value="say">say</option>
+                                <option value="edge">edge</option>
+                                <option value="cosyvoice">cosyvoice</option>
+                                <option value="fish">fish</option>
+                            </select>
+                        </label>
+                        <label class="settings-field">
+                            <span class="field-label">Host</span>
+                            <input id="settingHost" type="text" placeholder="0.0.0.0">
+                        </label>
+                        <label class="settings-field">
+                            <span class="field-label">Port</span>
+                            <input id="settingPort" type="number" min="1" max="65535" placeholder="8000">
+                        </label>
+                    </div>
+                </section>
             </div>
             <div class="modal-footer">
-                <button id="saveSettingsBtn" type="button" class="primary-btn">保存并开始对话</button>
+                <div id="saveSettingsStatus" class="field-note modal-status">Ready to save changes.</div>
+                <button id="saveSettingsBtn" type="button" class="primary-btn">Save and Unlock Chat</button>
             </div>
         </div>
     </div>

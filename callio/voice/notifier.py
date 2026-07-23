@@ -89,8 +89,14 @@ def notify_session_finished(
         loop = None
 
     if loop is not None:
-        asyncio.create_task(
-            loop.run_in_executor(None, _send_notifications_sync, settings, payload)
-        )
+        future = loop.run_in_executor(None, _send_notifications_sync, settings, payload)
+
+        def _log_failure(done_future) -> None:
+            try:
+                done_future.result()
+            except Exception as exc:
+                logger.warning("Session notification dispatch failed: %s", exc)
+
+        future.add_done_callback(_log_failure)
     else:
         _send_notifications_sync(settings, payload)
