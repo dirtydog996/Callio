@@ -18,8 +18,14 @@ Provider routing
 * ``gemini`` — Google Gemini's OpenAI-compatible endpoint.
   Reads ``GEMINI_API_KEY`` (or ``GOOGLE_API_KEY``) unless
   ``CALLIO_LLM_API_KEY`` is set.
+* ``deepseek`` — DeepSeek's OpenAI-compatible endpoint.
+  Reads ``DEEPSEEK_API_KEY`` unless ``CALLIO_LLM_API_KEY`` is set.
+* ``qwen`` — Alibaba Qwen via DashScope OpenAI-compatible endpoint.
+  Reads ``DASHSCOPE_API_KEY`` unless ``CALLIO_LLM_API_KEY`` is set.
+* ``kimi`` — Moonshot AI Kimi OpenAI-compatible endpoint.
+  Reads ``MOONSHOT_API_KEY`` unless ``CALLIO_LLM_API_KEY`` is set.
 * ``openai_compatible`` — any OpenAI-compatible third-party API
-  (Groq, Together, Mistral, DeepSeek, …).
+  (Groq, Together, Mistral, …).
   Requires ``CALLIO_LLM_BASE_URL`` and ``CALLIO_LLM_API_KEY``.
 """
 from __future__ import annotations
@@ -36,6 +42,9 @@ if TYPE_CHECKING:
 _PROVIDER_BASE_URLS: dict[str, str] = {
     "anthropic": "https://api.anthropic.com/v1",
     "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "deepseek": "https://api.deepseek.com/v1",
+    "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "kimi": "https://api.moonshot.cn/v1",
 }
 
 # Environment variable names that store the API key for each provider
@@ -43,6 +52,9 @@ _PROVIDER_KEY_ENVS: dict[str, str] = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "gemini": "GEMINI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "qwen": "DASHSCOPE_API_KEY",
+    "kimi": "MOONSHOT_API_KEY",
 }
 
 # Fallback env vars tried when the primary one is absent
