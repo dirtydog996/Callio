@@ -124,6 +124,9 @@
                             <select id="settingLlmProvider">
                                 <option value="ollama">ollama</option>
                                 <option value="openai">openai</option>
+                                <option value="deepseek">deepseek</option>
+                                <option value="qwen">qwen</option>
+                                <option value="kimi">kimi</option>
                                 <option value="anthropic">anthropic</option>
                                 <option value="gemini">gemini</option>
                                 <option value="openai_compatible">openai_compatible</option>
@@ -143,11 +146,11 @@
                             </div>
                             <div id="ollamaStatus" class="field-note">Checking Ollama service status...</div>
                         </div>
-                        <label class="settings-field" data-provider-scope="remote-auth openai anthropic gemini openai_compatible">
+                        <label class="settings-field" data-provider-scope="remote-auth openai deepseek qwen kimi anthropic gemini openai_compatible">
                             <span class="field-label">LLM API Key</span>
                             <input id="settingLlmApiKey" type="password" placeholder="Optional if already provided in server env">
                         </label>
-                        <label class="settings-field" data-provider-scope="openai_compatible">
+                        <label class="settings-field" data-provider-scope="openai_compatible deepseek qwen kimi">
                             <span class="field-label">LLM Base URL</span>
                             <input id="settingLlmBaseUrl" type="text" placeholder="Common for openai_compatible provider">
                         </label>

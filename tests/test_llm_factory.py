@@ -200,7 +200,7 @@ class BuildChatClientTests(unittest.TestCase):
         self.assertEqual(kw["base_url"], "https://api.groq.com/openai/v1")
         self.assertEqual(kw["api_key"], "groq-key")
 
-    def test_openai_compatible_without_explicit_url_falls_back_to_ollama_url(self) -> None:
+    def test_openai_compatible_without_explicit_url_raises(self) -> None:
         cap = _OpenAICallCapture()
         with patch(_FACTORY_PATH, cap):
             s = self._settings(
@@ -208,8 +208,30 @@ class BuildChatClientTests(unittest.TestCase):
                 llm_base_url="",
                 ollama_base_url="http://fallback:11434/v1",
             )
+            with self.assertRaises(ValueError):
+                build_chat_client(s)
+
+    # ------------------------------------------------------------------
+    # Cloud preset providers (OpenAI-compatible endpoints)
+    # ------------------------------------------------------------------
+    def test_deepseek_provider_uses_default_base_url(self) -> None:
+        cap = _OpenAICallCapture()
+        with patch(_FACTORY_PATH, cap):
+            s = self._settings(llm_provider="deepseek", llm_api_key="ds-key", llm_base_url="")
             build_chat_client(s)
-        self.assertEqual(cap.last_kwargs()["base_url"], "http://fallback:11434/v1")
+        kw = cap.last_kwargs()
+        self.assertEqual(kw["base_url"], "https://api.deepseek.com/v1")
+        self.assertEqual(kw["api_key"], "ds-key")
+
+    def test_qwen_provider_reads_dashscope_key_env(self) -> None:
+        cap = _OpenAICallCapture()
+        s = self._settings(llm_provider="qwen", llm_api_key="", llm_base_url="")
+        with patch(_FACTORY_PATH, cap), \
+             patch.dict(os.environ, {"DASHSCOPE_API_KEY": "dashscope-env-key"}, clear=False):
+            build_chat_client(s)
+        kw = cap.last_kwargs()
+        self.assertEqual(kw["base_url"], "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        self.assertEqual(kw["api_key"], "dashscope-env-key")
 
     # ------------------------------------------------------------------
     # Unknown/custom provider falls back to generic compat path

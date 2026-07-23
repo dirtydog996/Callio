@@ -76,7 +76,7 @@ Callio 扫描代码仓库，梳理模块边界与数据流，生成结构化入�
 - 可插拔 STT 后端（`whisper`、`sensevoice`）
 - 可插拔 TTS 后端（`chatt`、`say`、`edge`、`cosyvoice`、`fish`）
 - 可插拔 Agent 后端（`hermes`、`openclaw`、`goose`、`aider`、`claude`）
-- 可插拔 LLM 提供方（`ollama`、`openai`、`anthropic`、`gemini`、`openai_compatible`）
+- 可插拔 LLM 提供方（`ollama`、`openai`、`deepseek`、`qwen`、`kimi`、`anthropic`、`gemini`、`openai_compatible`）
 
 ## 快速开始
 
@@ -163,7 +163,7 @@ python app/cli/main.py dispatch --title "Plan tasks" --description "Break curren
 | `CALLIO_TTS_BACKEND` | `chatt` | TTS 后端（`chatt`、`say`、`edge`、`cosyvoice`、`fish`） |
 | `CALLIO_AGENT_BACKEND` | _(empty)_ | 指定 Agent 后端（`hermes`、`openclaw`、`goose`、`aider`、`claude`） |
 | `CALLIO_AGENT_COMMAND` | _(empty)_ | 自定义命令模板（包含 `{task}` 占位符） |
-| `CALLIO_LLM_PROVIDER` | `ollama` | LLM 提供方（`ollama`、`openai`、`anthropic`、`gemini`、`openai_compatible`） |
+| `CALLIO_LLM_PROVIDER` | `ollama` | LLM 提供方（`ollama`、`openai`、`deepseek`、`qwen`、`kimi`、`anthropic`、`gemini`、`openai_compatible`） |
 | `CALLIO_LLM_MODEL` | `qwen2.5:7b` | 所选 LLM 提供方对应模型名 |
 | `CALLIO_LLM_API_KEY` | _(empty)_ | 供应商 API Key（可回退到 `OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`GEMINI_API_KEY`） |
 | `CALLIO_LLM_BASE_URL` | _(empty)_ | `openai_compatible` 或代理路由场景下的 Base URL 覆盖 |

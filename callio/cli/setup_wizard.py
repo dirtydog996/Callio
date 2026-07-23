@@ -8,10 +8,35 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import json
 from pathlib import Path
+from urllib.request import urlopen
 
 _ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 _EXAMPLE_ENV_FILE = Path(__file__).resolve().parents[2] / ".env.example"
+
+_CLOUD_COMPAT_PRESETS: dict[str, dict[str, str]] = {
+    "deepseek": {
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat",
+        "api_key_env": "DEEPSEEK_API_KEY",
+    },
+    "qwen": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-plus",
+        "api_key_env": "DASHSCOPE_API_KEY",
+    },
+    "kimi": {
+        "base_url": "https://api.moonshot.cn/v1",
+        "model": "moonshot-v1-8k",
+        "api_key_env": "MOONSHOT_API_KEY",
+    },
+    "custom": {
+        "base_url": "",
+        "model": "",
+        "api_key_env": "CALLIO_LLM_API_KEY",
+    },
+}
 
 
 def _print_header(text: str) -> None:
@@ -69,6 +94,25 @@ def _check_cli(cmd: str) -> bool:
     return shutil.which(cmd) is not None
 
 
+def _ollama_tags_url(base_url: str) -> str:
+    normalized = (base_url or "http://localhost:11434/v1").strip().rstrip("/")
+    if normalized.endswith("/v1"):
+        normalized = normalized[:-3]
+    return f"{normalized}/api/tags"
+
+
+def _fetch_ollama_models(base_url: str) -> tuple[list[str], str | None]:
+    url = _ollama_tags_url(base_url)
+    try:
+        with urlopen(url, timeout=2.5) as response:  # nosec B310 - user-provided local/service URL
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        return [], str(exc)
+    models = payload.get("models", []) if isinstance(payload, dict) else []
+    names = sorted({str(item.get("name", "")).strip() for item in models if isinstance(item, dict) and item.get("name")})
+    return names, None
+
+
 def _load_env_file(path: Path) -> dict[str, str]:
     """Parse a dotenv-style file into a dict."""
     env: dict[str, str] = {}
@@ -91,21 +135,41 @@ def _load_existing_env() -> dict[str, str]:
     return env
 
 
+def _guess_llm_mode(config: dict[str, str]) -> str:
+    provider = (config.get("CALLIO_LLM_PROVIDER", "ollama") or "ollama").strip().lower()
+    return "local" if provider == "ollama" else "cloud"
+
+
+def _guess_cloud_vendor(config: dict[str, str]) -> str:
+    provider = (config.get("CALLIO_LLM_PROVIDER", "") or "").strip().lower()
+    if provider in {"openai", "anthropic", "gemini", "deepseek", "qwen", "kimi"}:
+        return provider
+    if provider != "openai_compatible":
+        return "custom"
+
+    base_url = (config.get("CALLIO_LLM_BASE_URL", "") or "").strip().lower()
+    if "deepseek" in base_url:
+        return "deepseek"
+    if "dashscope" in base_url or "aliyuncs" in base_url or "qwen" in base_url:
+        return "qwen"
+    if "moonshot" in base_url or "kimi" in base_url:
+        return "kimi"
+    return "custom"
+
+
 def _setup_llm(config: dict[str, str]) -> None:
     _print_header("LLM Provider Configuration")
-    print(
-        "Supported providers: ollama (local), openai, anthropic, gemini,\n"
-        "  deepseek, qwen, kimi, openai_compatible\n"
+    print("Choose local (Ollama) or cloud (OpenAI/DeepSeek/Qwen/Kimi/...).\n")
+
+    llm_mode = _ask_choice(
+        "LLM mode",
+        ["local", "cloud"],
+        _guess_llm_mode(config),
     )
 
-    provider = _ask_choice(
-        "LLM provider",
-        ["ollama", "openai", "anthropic", "gemini", "deepseek", "qwen", "kimi", "openai_compatible"],
-        config.get("CALLIO_LLM_PROVIDER", "ollama"),
-    )
-    config["CALLIO_LLM_PROVIDER"] = provider
-
-    if provider == "ollama":
+    if llm_mode == "local":
+        provider = "ollama"
+        config["CALLIO_LLM_PROVIDER"] = provider
         if _check_cli("ollama"):
             print("  ✅ ollama found on PATH.")
         else:
@@ -122,63 +186,85 @@ def _setup_llm(config: dict[str, str]) -> None:
         )
         config["CALLIO_OLLAMA_BASE_URL"] = base_url
         config.pop("CALLIO_LLM_BASE_URL", None)
-        model = _ask("LLM model name", config.get("CALLIO_LLM_MODEL", "qwen2.5:7b"))
-        config["CALLIO_LLM_MODEL"] = model
+
+        discovered_models: list[str] = []
+        discovery_error: str | None = None
+        discovered_models, discovery_error = _fetch_ollama_models(base_url)
+        if discovered_models:
+            print(f"  ✅ Found {len(discovered_models)} installed Ollama model(s).")
+            print(f"     Example: {', '.join(discovered_models[:5])}")
+        else:
+            print("  ⚠️  Could not auto-detect installed Ollama models from the configured base URL.")
+            if discovery_error:
+                print(f"     Reason: {discovery_error}")
+
+        default_model = config.get("CALLIO_LLM_MODEL", "qwen2.5:7b")
+        if discovered_models and default_model not in discovered_models:
+            default_model = discovered_models[0]
+
+        while True:
+            model = _ask("LLM model name", default_model)
+            if not discovered_models or model in discovered_models:
+                config["CALLIO_LLM_MODEL"] = model
+                break
+
+            print(f"  ⚠️  Model '{model}' is not in the installed Ollama model list.")
+            print("     If you meant a hosted model (e.g. DeepSeek cloud names), use provider 'openai_compatible' instead of 'ollama'.")
+            if _ask_bool("  Keep this model name anyway?", default=False):
+                config["CALLIO_LLM_MODEL"] = model
+                break
+
         if _check_cli("ollama") and model and _ask_bool("  Pull this Ollama model now?", default=False):
             subprocess.run(["ollama", "pull", model], check=False)
 
-    elif provider == "openai":
+        return
+
+    cloud_vendor = _ask_choice(
+        "Cloud vendor",
+        ["openai", "deepseek", "qwen", "kimi", "anthropic", "gemini", "custom"],
+        _guess_cloud_vendor(config),
+    )
+
+    if cloud_vendor == "openai":
+        config["CALLIO_LLM_PROVIDER"] = "openai"
         config.pop("CALLIO_LLM_BASE_URL", None)
         api_key = _ask("OpenAI API key (OPENAI_API_KEY)", config.get("CALLIO_LLM_API_KEY", ""))
         config["CALLIO_LLM_API_KEY"] = api_key
         model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "gpt-4o"))
         config["CALLIO_LLM_MODEL"] = model
+        return
 
-    elif provider == "anthropic":
+    if cloud_vendor == "anthropic":
+        config["CALLIO_LLM_PROVIDER"] = "anthropic"
         config.pop("CALLIO_LLM_BASE_URL", None)
         api_key = _ask("Anthropic API key", config.get("CALLIO_LLM_API_KEY", ""))
         config["CALLIO_LLM_API_KEY"] = api_key
         model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "claude-3-5-sonnet-20241022"))
         config["CALLIO_LLM_MODEL"] = model
+        return
 
-    elif provider == "gemini":
+    if cloud_vendor == "gemini":
+        config["CALLIO_LLM_PROVIDER"] = "gemini"
         config.pop("CALLIO_LLM_BASE_URL", None)
         api_key = _ask("Gemini API key", config.get("CALLIO_LLM_API_KEY", ""))
         config["CALLIO_LLM_API_KEY"] = api_key
         model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "gemini-1.5-pro"))
         config["CALLIO_LLM_MODEL"] = model
+        return
 
-    elif provider == "deepseek":
-        config.pop("CALLIO_LLM_BASE_URL", None)
-        print("  ℹ️  DeepSeek uses https://api.deepseek.com/v1 (set automatically)")
-        api_key = _ask("DeepSeek API key (DEEPSEEK_API_KEY)", config.get("CALLIO_LLM_API_KEY", ""))
-        config["CALLIO_LLM_API_KEY"] = api_key
-        model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "deepseek-chat"))
-        config["CALLIO_LLM_MODEL"] = model
-
-    elif provider == "qwen":
-        config.pop("CALLIO_LLM_BASE_URL", None)
-        print("  ℹ️  Qwen uses DashScope https://dashscope.aliyuncs.com/compatible-mode/v1 (set automatically)")
-        api_key = _ask("DashScope API key (DASHSCOPE_API_KEY)", config.get("CALLIO_LLM_API_KEY", ""))
-        config["CALLIO_LLM_API_KEY"] = api_key
-        model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "qwen-plus"))
-        config["CALLIO_LLM_MODEL"] = model
-
-    elif provider == "kimi":
-        config.pop("CALLIO_LLM_BASE_URL", None)
-        print("  ℹ️  Kimi (Moonshot AI) uses https://api.moonshot.cn/v1 (set automatically)")
-        api_key = _ask("Moonshot API key (MOONSHOT_API_KEY)", config.get("CALLIO_LLM_API_KEY", ""))
-        config["CALLIO_LLM_API_KEY"] = api_key
-        model = _ask("Model name", config.get("CALLIO_LLM_MODEL", "moonshot-v1-8k"))
-        config["CALLIO_LLM_MODEL"] = model
-
-    elif provider == "openai_compatible":
-        base_url = _ask("API base URL", config.get("CALLIO_LLM_BASE_URL", ""))
-        config["CALLIO_LLM_BASE_URL"] = base_url
-        api_key = _ask("API key", config.get("CALLIO_LLM_API_KEY", ""))
-        config["CALLIO_LLM_API_KEY"] = api_key
-        model = _ask("Model name", config.get("CALLIO_LLM_MODEL", ""))
-        config["CALLIO_LLM_MODEL"] = model
+    # deepseek/qwen/kimi/custom share the OpenAI-compatible transport.
+    # Keep deepseek/qwen/kimi as first-class provider values for clarity.
+    config["CALLIO_LLM_PROVIDER"] = cloud_vendor if cloud_vendor in {"deepseek", "qwen", "kimi"} else "openai_compatible"
+    preset = _CLOUD_COMPAT_PRESETS.get(cloud_vendor, _CLOUD_COMPAT_PRESETS["custom"])
+    default_base = config.get("CALLIO_LLM_BASE_URL", "") or preset["base_url"]
+    default_model = config.get("CALLIO_LLM_MODEL", "") or preset["model"]
+    base_url = _ask("API base URL", default_base)
+    config["CALLIO_LLM_BASE_URL"] = base_url
+    api_key_prompt = f"API key ({preset['api_key_env']} or CALLIO_LLM_API_KEY)"
+    api_key = _ask(api_key_prompt, config.get("CALLIO_LLM_API_KEY", ""))
+    config["CALLIO_LLM_API_KEY"] = api_key
+    model = _ask("Model name", default_model)
+    config["CALLIO_LLM_MODEL"] = model
 
 
 def _setup_stt(config: dict[str, str]) -> None:

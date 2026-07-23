@@ -3,6 +3,11 @@
     const mode = document.body.dataset.clientMode || "web";
     const LAST_SESSION_STORAGE_KEY = "callio.lastSessionId";
     const SETTINGS_READY_STORAGE_KEY = "callio.settingsReady";
+    const CLOUD_PROVIDER_PRESETS = {
+        deepseek: { baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+        qwen: { baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus" },
+        kimi: { baseUrl: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k" },
+    };
 
     function loadStoredSessionId() {
         try {
@@ -302,6 +307,8 @@
             elements.providerHint.className = "field-note info field-span-2";
             if (provider === "ollama") {
                 elements.providerHint.textContent = "Ollama uses a local base URL and can auto-discover installed models from the running service.";
+            } else if (provider === "deepseek" || provider === "qwen" || provider === "kimi") {
+                elements.providerHint.textContent = "This cloud provider uses an OpenAI-compatible endpoint. Base URL and model can be prefilled automatically.";
             } else if (provider === "openai_compatible") {
                 elements.providerHint.textContent = "OpenAI-compatible providers usually require both a base URL and an API key.";
             } else {
@@ -311,6 +318,25 @@
         if (!showOllama && elements.ollamaStatus) {
             elements.ollamaStatus.className = "field-note";
             elements.ollamaStatus.textContent = "Ollama model discovery is only used when the provider is set to ollama.";
+        }
+    }
+
+    function applyCloudProviderPreset(provider) {
+        const preset = CLOUD_PROVIDER_PRESETS[provider];
+        if (!preset) return;
+        if (elements.settingLlmBaseUrl) {
+            const current = elements.settingLlmBaseUrl.value.trim();
+            const knownPresetBases = Object.values(CLOUD_PROVIDER_PRESETS).map((item) => item.baseUrl);
+            if (!current || knownPresetBases.includes(current)) {
+                elements.settingLlmBaseUrl.value = preset.baseUrl;
+            }
+        }
+        if (elements.settingLlmModel) {
+            const currentModel = elements.settingLlmModel.value.trim();
+            const knownPresetModels = Object.values(CLOUD_PROVIDER_PRESETS).map((item) => item.model);
+            if (!currentModel || knownPresetModels.includes(currentModel) || currentModel === "qwen2.5:7b") {
+                elements.settingLlmModel.value = preset.model;
+            }
         }
     }
 
@@ -440,6 +466,8 @@
         if (elements.settingHost) elements.settingHost.value = data.CALLIO_HOST || "0.0.0.0";
         if (elements.settingPort) elements.settingPort.value = data.CALLIO_PORT || "8000";
         if (elements.settingOllamaModelSelect) elements.settingOllamaModelSelect.value = data.CALLIO_LLM_MODEL || "";
+        const provider = elements.settingLlmProvider?.value || "ollama";
+        applyCloudProviderPreset(provider);
         applyProviderSpecificUI();
     }
 
@@ -1222,6 +1250,8 @@
     function bindSettingsWizard() {
         if (mode !== "web") return;
         elements.settingLlmProvider?.addEventListener("change", async () => {
+            const provider = elements.settingLlmProvider.value || "ollama";
+            applyCloudProviderPreset(provider);
             applyProviderSpecificUI();
             await loadOllamaModels();
         });

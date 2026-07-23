@@ -76,7 +76,7 @@ Core modules:
 - Pluggable STT backends (`whisper`, `sensevoice`)
 - Pluggable TTS backends (`chatt`, `say`, `edge`, `cosyvoice`, `fish`)
 - Pluggable agent backends (`hermes`, `openclaw`, `goose`, `aider`, `claude`)
-- Pluggable LLM providers (`ollama`, `openai`, `anthropic`, `gemini`, `openai_compatible`)
+- Pluggable LLM providers (`ollama`, `openai`, `deepseek`, `qwen`, `kimi`, `anthropic`, `gemini`, `openai_compatible`)
 
 ## Quick Start
 
@@ -163,7 +163,7 @@ Ready-to-copy setup examples are available in `/examples`:
 | `CALLIO_TTS_BACKEND` | `chatt` | TTS backend (`chatt`, `say`, `edge`, `cosyvoice`, `fish`) |
 | `CALLIO_AGENT_BACKEND` | _(empty)_ | Force agent backend (`hermes`, `openclaw`, `goose`, `aider`, `claude`) |
 | `CALLIO_AGENT_COMMAND` | _(empty)_ | Custom command template (`{task}` placeholder) |
-| `CALLIO_LLM_PROVIDER` | `ollama` | LLM provider (`ollama`, `openai`, `anthropic`, `gemini`, `openai_compatible`) |
+| `CALLIO_LLM_PROVIDER` | `ollama` | LLM provider (`ollama`, `openai`, `deepseek`, `qwen`, `kimi`, `anthropic`, `gemini`, `openai_compatible`) |
 | `CALLIO_LLM_MODEL` | `qwen2.5:7b` | Model name for the selected LLM provider |
 | `CALLIO_LLM_API_KEY` | _(empty)_ | API key for selected provider (falls back to `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) |
 | `CALLIO_LLM_BASE_URL` | _(empty)_ | Base URL override for `openai_compatible` or provider proxy routing |
