@@ -4,7 +4,7 @@
 
 ![Callio Logo](app/shared/callio-logo.svg)
 
-> "Talk to your code. Talk to your ideas. Talk to the future."
+> "Talk to your code. Talk to your ideas. Talk to the future. Talk about everything."
 
 Callio is a voice-first super-intelligent personal assistant built on large language models, designed to transform how humans collaborate with AI. It is not another voice assistant that only follows commands and gives answers. Callio is an extension of your mind: a second brain you can call anytime, anywhere.
 
