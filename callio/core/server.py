@@ -156,18 +156,43 @@ class SettingsUpdateRequest(BaseModel):
 
 
 class ConnectionManager:
-    def __init__(self) -> None:
+    def __init__(self, idle_timeout_sec: float = 120.0) -> None:
         self.active_connections: set[WebSocket] = set()
+        self._last_seen: dict[WebSocket, float] = {}
+        self._idle_timeout = idle_timeout_sec
         self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         async with self._lock:
             self.active_connections.add(websocket)
+            self._last_seen[websocket] = asyncio.get_event_loop().time()
 
     async def disconnect(self, websocket: WebSocket) -> None:
         async with self._lock:
             self.active_connections.discard(websocket)
+            self._last_seen.pop(websocket, None)
+
+    def touch(self, websocket: WebSocket) -> None:
+        self._last_seen[websocket] = asyncio.get_event_loop().time()
+
+    async def cleanup_stale(self) -> int:
+        now = asyncio.get_event_loop().time()
+        stale: list[WebSocket] = []
+        async with self._lock:
+            for ws in list(self.active_connections):
+                last = self._last_seen.get(ws, now)
+                if now - last > self._idle_timeout:
+                    stale.append(ws)
+            for ws in stale:
+                self.active_connections.discard(ws)
+                self._last_seen.pop(ws, None)
+        for ws in stale:
+            try:
+                await ws.close(code=1011, reason="idle timeout")
+            except Exception:
+                pass
+        return len(stale)
 
     async def broadcast_status(self, message: dict[str, Any]) -> None:
         async with self._lock:
@@ -176,12 +201,14 @@ class ConnectionManager:
         for connection in connections:
             try:
                 await connection.send_json(message)
+                self.touch(connection)
             except Exception:
                 stale_connections.append(connection)
         if stale_connections:
             async with self._lock:
                 for connection in stale_connections:
                     self.active_connections.discard(connection)
+                    self._last_seen.pop(connection, None)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -198,6 +225,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     orchestrator = Orchestrator(database, manager, task_dispatcher, settings)
 
     app = FastAPI(title=settings.app_title, version=settings.app_version)
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request, exc):
+        logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     @app.get("/")
     async def root() -> RedirectResponse:
@@ -220,6 +253,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         resumed = await task_dispatcher.resume_pending()
         if resumed:
             logger.info("Resumed %d queued task(s)", resumed)
+
+    async def _idle_cleanup_loop():
+        while True:
+            await asyncio.sleep(60)
+            try:
+                cleaned = await manager.cleanup_stale()
+                if cleaned:
+                    logger.info("Cleaned up %d stale WebSocket connection(s)", cleaned)
+            except Exception:
+                logger.debug("Idle cleanup cycle error", exc_info=True)
+
+    @app.on_event("startup")
+    async def start_idle_cleanup() -> None:
+        asyncio.create_task(_idle_cleanup_loop())
 
     @app.get("/api/v1/health")
     async def health() -> dict[str, Any]:
@@ -364,6 +411,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             while True:
                 data = await websocket.receive_text()
+                manager.touch(websocket)
                 await websocket.send_json({"status": "heartbeat", "received": data})
         except WebSocketDisconnect:
             await manager.disconnect(websocket)

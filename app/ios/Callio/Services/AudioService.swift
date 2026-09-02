@@ -22,7 +22,7 @@ final class AudioService: NSObject {
     
     // 目标采样率
     static let targetSampleRate: Double = 16000
-    private let inputFormatSampleRate: Double = 48000 // iOS 麦克风默认采样率
+    private var inputFormatSampleRate: Double = 48000 // 默认值，实际从硬件动态获取
     
     // 录音回调
     var onAudioData: ((Data) -> Void)?
@@ -92,6 +92,8 @@ final class AudioService: NSObject {
         
         // 获取输入格式（硬件格式）
         let hardwareFormat = input.outputFormat(forBus: 0)
+        // 动态获取设备实际采样率
+        inputFormatSampleRate = hardwareFormat.sampleRate
         
         // 设置录音格式为 16kHz 单声道
         guard let format = AVAudioFormat(
