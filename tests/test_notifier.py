@@ -5,9 +5,27 @@ import importlib.util
 import pathlib
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from callio.config.settings import Settings
+
+for _stub in ("openai", "chromadb", "fastapi", "starlette", "pipecat"):
+    if _stub not in sys.modules:
+        _m = MagicMock()
+        _m.__spec__ = None
+        sys.modules[_stub] = _m
+
+_openai = sys.modules["openai"]
+if not hasattr(_openai, "AsyncOpenAI"):
+    _openai.AsyncOpenAI = MagicMock()
+
+_voice_pkg = MagicMock()
+_voice_pkg.__path__ = [str(pathlib.Path(__file__).parent.parent / "callio" / "voice")]
+_voice_pkg.__package__ = "callio.voice"
+sys.modules["callio.voice"] = _voice_pkg
+
+import callio as _callio_mod
+_callio_mod.voice = _voice_pkg
 
 
 def _load_notifier_module():
@@ -20,6 +38,7 @@ def _load_notifier_module():
 
 
 _notifier = _load_notifier_module()
+_voice_pkg.notifier = _notifier
 build_session_notification_payload = _notifier.build_session_notification_payload
 notify_session_finished = _notifier.notify_session_finished
 

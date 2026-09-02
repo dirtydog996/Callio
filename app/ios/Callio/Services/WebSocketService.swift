@@ -23,9 +23,17 @@ final class WebSocketService {
     private var statusWebSocket: URLSessionWebSocketTask?
     private var urlSession: URLSession?
     private var isConnected = false
+    private var isDisconnecting = false
     private var currentHost: String = ""
     private var currentPort: String = ""
     private var useHTTPS: Bool = false
+    private var resumeSessionId: String? = nil
+
+    // 重连参数
+    private var shouldAutoReconnect = false
+    private var reconnectAttempts = 0
+    private let maxReconnectAttempts = 10
+    private var reconnectTimer: DispatchSourceTimer?
     
     // 目标采样率（与服务端一致）
     static let targetSampleRate: Double = 16000
@@ -42,6 +50,14 @@ final class WebSocketService {
         self.currentHost = host
         self.currentPort = port
         self.useHTTPS = useHTTPS
+        self.resumeSessionId = resumeSessionId
+        self.shouldAutoReconnect = true
+        self.reconnectAttempts = 0
+        self.isDisconnecting = false
+        establishConnection()
+    }
+
+    private func establishConnection() {
         
         let scheme = useHTTPS ? "wss" : "ws"
         var urlString = "\(scheme)://\(host):\(port)/ws"
@@ -70,14 +86,46 @@ final class WebSocketService {
     
     /// 断开连接
     func disconnect() {
+        isDisconnecting = true
+        shouldAutoReconnect = false
+        cancelReconnectTimer()
         isConnected = false
         webSocket?.cancel(with: .normalClosure, reason: nil)
         webSocket = nil
-        
+
         statusWebSocket?.cancel(with: .normalClosure, reason: nil)
         statusWebSocket = nil
-        
+
         onDisconnect?()
+    }
+
+    // MARK: - 自动重连
+
+    private func scheduleReconnect() {
+        guard shouldAutoReconnect else { return }
+        guard reconnectAttempts < maxReconnectAttempts else {
+            onError?("连接超时", "已达到最大重连次数 (\(maxReconnectAttempts))，请检查服务器状态后重试。")
+            shouldAutoReconnect = false
+            return
+        }
+
+        reconnectAttempts += 1
+        let delay = min(pow(2.0, Double(reconnectAttempts)) * 0.1, 5.0)
+
+        cancelReconnectTimer()
+        let timer = DispatchSource.makeTimerSource()
+        timer.schedule(deadline: .now() + delay)
+        timer.setEventHandler { [weak self] in
+            guard let self = self, self.shouldAutoReconnect else { return }
+            self.establishConnection()
+        }
+        timer.resume()
+        reconnectTimer = timer
+    }
+
+    private func cancelReconnectTimer() {
+        reconnectTimer?.cancel()
+        reconnectTimer = nil
     }
     
     // MARK: - 状态 WebSocket
@@ -151,8 +199,12 @@ final class WebSocketService {
                 if self.isConnected {
                     self.onError?("连接错误", error.localizedDescription)
                 }
-                self.disconnect()
-            }
+                self.isConnected = false
+                if !self.isDisconnecting && self.shouldAutoReconnect {
+                    self.scheduleReconnect()
+                } else {
+                    self.onDisconnect?()
+                }
         }
     }
     
