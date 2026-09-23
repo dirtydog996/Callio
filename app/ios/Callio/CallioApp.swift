@@ -114,6 +114,16 @@ final class AppState: ObservableObject {
         if let saved = AppSettings.load() {
             settings = saved
         }
+        // ponytail: legacy installs may have host/port only in UserDefaults (pre-AppSettings versions)
+        if settings.serverHost.isEmpty {
+            settings.serverHost = UserDefaults.standard.string(forKey: "serverHost") ?? ""
+        }
+        if settings.serverPort.isEmpty || settings.serverPort == "8000" {
+            settings.serverPort = UserDefaults.standard.string(forKey: "serverPort") ?? settings.serverPort
+        }
+        if settings.authToken.isEmpty {
+            settings.authToken = UserDefaults.standard.string(forKey: "authToken") ?? ""
+        }
     }
     
     func saveSettings() {
@@ -155,7 +165,8 @@ final class AppState: ObservableObject {
                 self.webSocketService.connect(
                     host: self.settings.serverHost,
                     port: self.settings.serverPort,
-                    resumeSessionId: self.selectedSessionId
+                    resumeSessionId: self.selectedSessionId,
+                    token: self.settings.authToken
                 )
                 self.isRecording = true
             } else {

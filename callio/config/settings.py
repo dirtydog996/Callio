@@ -92,6 +92,11 @@ class Settings:
     notify_discord_webhook: str = os.getenv("CALLIO_NOTIFY_DISCORD_WEBHOOK", "")
     notify_telegram_webhook: str = os.getenv("CALLIO_NOTIFY_TELEGRAM_WEBHOOK", "")
     notify_timeout_sec: int = int(os.getenv("CALLIO_NOTIFY_TIMEOUT_SEC", "8"))
+    # API token auth; 0 keeps all endpoints open (existing local deployments unchanged)
+    auth_enabled: bool = os.getenv("CALLIO_AUTH_ENABLED", "0") == "1"
+    # Recovery-only token: valid directly from env, never stored in db. Set temporarily
+    # when all api_tokens are lost, then unset after issuing a new one.
+    bootstrap_token: str = os.getenv("CALLIO_BOOTSTRAP_TOKEN", "")
 
     def validate_complete(self) -> None:
         """Compatibility hook for third-party service settings validation."""

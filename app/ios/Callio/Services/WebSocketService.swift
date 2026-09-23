@@ -28,6 +28,7 @@ final class WebSocketService {
     private var currentPort: String = ""
     private var useHTTPS: Bool = false
     private var resumeSessionId: String? = nil
+    private var authToken: String = ""
 
     // 重连参数
     private var shouldAutoReconnect = false
@@ -46,11 +47,12 @@ final class WebSocketService {
     // MARK: - 连接管理
     
     /// 连接到语音 WebSocket
-    func connect(host: String, port: String, resumeSessionId: String? = nil, useHTTPS: Bool = false) {
+    func connect(host: String, port: String, resumeSessionId: String? = nil, useHTTPS: Bool = false, token: String = "") {
         self.currentHost = host
         self.currentPort = port
         self.useHTTPS = useHTTPS
         self.resumeSessionId = resumeSessionId
+        self.authToken = token
         self.shouldAutoReconnect = true
         self.reconnectAttempts = 0
         self.isDisconnecting = false
@@ -58,16 +60,22 @@ final class WebSocketService {
     }
 
     private func establishConnection() {
-        
+
         let scheme = useHTTPS ? "wss" : "ws"
-        var urlString = "\(scheme)://\(host):\(port)/ws"
-        
+        var components = URLComponents(string: "\(scheme)://\(host):\(port)/ws")
+        var queryItems: [URLQueryItem] = []
+        if !authToken.isEmpty {
+            queryItems.append(URLQueryItem(name: "token", value: authToken))
+        }
         if let resumeId = resumeSessionId,
            let encodedId = resumeId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-            urlString += "?resume_session_id=\(encodedId)"
+            queryItems.append(URLQueryItem(name: "resume_session_id", value: encodedId))
+        }
+        if !queryItems.isEmpty {
+            components?.queryItems = queryItems
         }
         
-        guard let url = URL(string: urlString) else {
+        guard let url = components?.url else {
             onError?("连接错误", "无效的服务器地址")
             return
         }
@@ -132,7 +140,11 @@ final class WebSocketService {
     
     private func connectStatusSocket(host: String, port: String, useHTTPS: Bool) {
         let scheme = useHTTPS ? "wss" : "ws"
-        guard let url = URL(string: "\(scheme)://\(host):\(port)/ws/status") else { return }
+        var components = URLComponents(string: "\(scheme)://\(host):\(port)/ws/status")
+        if !authToken.isEmpty {
+            components?.queryItems = [URLQueryItem(name: "token", value: authToken)]
+        }
+        guard let url = components?.url else { return }
         guard let session = urlSession else { return }
         
         statusWebSocket = session.webSocketTask(with: url)

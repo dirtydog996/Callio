@@ -72,6 +72,14 @@ class Database:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     claimed_at TIMESTAMP
                 );
+
+                CREATE TABLE IF NOT EXISTS api_tokens (
+                    token_hash TEXT PRIMARY KEY,
+                    label TEXT NOT NULL DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_used_at TIMESTAMP,
+                    revoked_at TIMESTAMP
+                );
                 """
             )
             self._migrate(conn)
@@ -541,3 +549,47 @@ class Database:
             )
             conn.commit()
             return cur.rowcount
+
+    def create_api_token(self, token_hash: str, label: str = "") -> None:
+        with self.connection() as conn:
+            conn.execute(
+                "INSERT INTO api_tokens (token_hash, label) VALUES (?, ?)",
+                (token_hash, label),
+            )
+            conn.commit()
+
+    def get_api_token(self, token_hash: str) -> dict | None:
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM api_tokens WHERE token_hash = ? AND revoked_at IS NULL",
+                (token_hash,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_api_tokens(self) -> list[dict]:
+        with self.connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM api_tokens ORDER BY created_at DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def revoke_api_token(self, token_hash: str) -> int:
+        with self.connection() as conn:
+            cur = conn.execute(
+                """
+                UPDATE api_tokens SET revoked_at = CURRENT_TIMESTAMP
+                WHERE token_hash = ? AND revoked_at IS NULL
+                """,
+                (token_hash,),
+            )
+            conn.commit()
+            return cur.rowcount
+
+    def touch_api_token(self, token_hash: str) -> None:
+        # ponytail: one UPDATE per request; add 60s throttle if write amplification matters
+        with self.connection() as conn:
+            conn.execute(
+                "UPDATE api_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
+                (token_hash,),
+            )
+            conn.commit()

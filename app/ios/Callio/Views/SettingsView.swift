@@ -39,6 +39,14 @@ struct SettingsView: View {
                                 .keyboardType(.numberPad)
                         }
                         
+                        // API Token
+                        settingField(title: "API Token", placeholder: "留空则不鉴权") {
+                            SecureField("API Token", text: $appState.settings.authToken)
+                                .textFieldStyle(.plain)
+                                .foregroundColor(AppTheme.text)
+                                .autocapitalization(.none)
+                        }
+
                         // HTTPS 开关
                         Toggle("使用 HTTPS / WSS", isOn: $appState.settings.useHTTPS)
                             .tint(AppTheme.primary)
@@ -233,6 +241,7 @@ struct SettingsView: View {
         UserDefaults.standard.set(appState.settings.serverHost, forKey: "serverHost")
         UserDefaults.standard.set(appState.settings.serverPort, forKey: "serverPort")
         UserDefaults.standard.set(appState.settings.useHTTPS, forKey: "useHTTPS")
+        UserDefaults.standard.set(appState.settings.authToken, forKey: "authToken")
         
         // 尝试同步到服务器
         Task {

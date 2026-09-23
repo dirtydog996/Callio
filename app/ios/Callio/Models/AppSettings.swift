@@ -88,23 +88,42 @@ struct AppSettings: Codable {
     var serverHost: String = ""
     var serverPort: String = "8000"
     var useHTTPS: Bool = false
-    
+    var authToken: String = ""
+
     // LLM 设置
     var llmProvider: LLMProvider = .ollama
     var llmModel: String = "qwen2.5:7b"
     var llmApiKey: String = ""
     var llmBaseUrl: String = "http://localhost:11434/v1"
-    
+
     // Ollama 设置
     var ollamaBaseUrl: String = "http://localhost:11434/v1"
-    
+
     // 语音设置
     var sttBackend: STTBackend = .whisper
     var ttsBackend: TTSBackend = .chatt
-    
+
     // 本地存储键
     private static let storageKey = "CallioAppSettings"
-    
+
+    /// 兼容旧版本持久化 JSON（缺 authToken 等 key 时用默认值，避免整体 decode 失败清空设置）
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        serverHost = try c.decodeIfPresent(String.self, forKey: .serverHost) ?? ""
+        serverPort = try c.decodeIfPresent(String.self, forKey: .serverPort) ?? "8000"
+        useHTTPS = try c.decodeIfPresent(Bool.self, forKey: .useHTTPS) ?? false
+        authToken = try c.decodeIfPresent(String.self, forKey: .authToken) ?? ""
+        llmProvider = try c.decodeIfPresent(LLMProvider.self, forKey: .llmProvider) ?? .ollama
+        llmModel = try c.decodeIfPresent(String.self, forKey: .llmModel) ?? "qwen2.5:7b"
+        llmApiKey = try c.decodeIfPresent(String.self, forKey: .llmApiKey) ?? ""
+        llmBaseUrl = try c.decodeIfPresent(String.self, forKey: .llmBaseUrl) ?? "http://localhost:11434/v1"
+        ollamaBaseUrl = try c.decodeIfPresent(String.self, forKey: .ollamaBaseUrl) ?? "http://localhost:11434/v1"
+        sttBackend = try c.decodeIfPresent(STTBackend.self, forKey: .sttBackend) ?? .whisper
+        ttsBackend = try c.decodeIfPresent(TTSBackend.self, forKey: .ttsBackend) ?? .chatt
+    }
+
+    init() {}
+
     /// 保存设置到 UserDefaults
     func save() {
         if let data = try? JSONEncoder().encode(self) {

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from callio.config.settings import Settings, get_settings, reload_settings_from_env
 from callio.web import WEB_CLIENT_PATH
+from callio.core.auth import AuthMiddleware, generate_token, hash_token
 from callio.core.database import Database
 from callio.core.memory import MemoryHub
 from callio.orchestrator import Orchestrator
@@ -225,6 +226,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     orchestrator = Orchestrator(database, manager, task_dispatcher, settings)
 
     app = FastAPI(title=settings.app_title, version=settings.app_version)
+    app.add_middleware(
+        AuthMiddleware,
+        auth_enabled=settings.auth_enabled,
+        database=database,
+        bootstrap_token=settings.bootstrap_token,
+    )
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request, exc):
@@ -434,5 +441,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         })
         await task_dispatcher.dispatch(todo.model_dump())
         return {"status": "dispatched", "node_id": todo.node_id}
+
+    class TokenCreateRequest(BaseModel):
+        label: str = ""
+
+    @app.post("/api/v1/tokens")
+    async def create_token(req: TokenCreateRequest) -> dict[str, str]:
+        token = generate_token()
+        token_hash = hash_token(token)
+        database.create_api_token(token_hash, req.label)
+        return {"token": token, "token_hash": token_hash, "label": req.label}
+
+    @app.get("/api/v1/tokens")
+    async def list_tokens() -> dict[str, Any]:
+        return {"items": database.list_api_tokens()}
+
+    @app.delete("/api/v1/tokens/{token_hash}")
+    async def revoke_token(token_hash: str) -> dict[str, str]:
+        if database.revoke_api_token(token_hash) == 0:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="token not found")
+        return {"status": "revoked"}
 
     return app
