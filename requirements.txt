@@ -36,6 +36,9 @@ scipy>=1.12.0
 #   启用: CALLIO_AEC_ENABLED=1  CALLIO_AEC_CONVERGENCE_GUARD=1
 # pywebrtc-audio>=0.2.0
 
+# ONNX Smart Turn EOU (via Pipecat LocalSmartTurnAnalyzerV3)
+onnxruntime>=1.17.0
+
 # 日志
 loguru>=0.7.0
 

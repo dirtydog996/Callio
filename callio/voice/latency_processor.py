@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
+    InterimTranscriptionFrame,
     LLMTextFrame,
     OutputAudioRawFrame,
     TranscriptionFrame,
@@ -66,6 +67,9 @@ class LatencyProcessor(FrameProcessor):
             self._recorder.on_user_speech_end()
             self._assistant_responding = False
 
+        elif isinstance(frame, InterimTranscriptionFrame) and frame.text:
+            if self._recorder.is_unset("t_stt_final") and len(frame.text.strip()) >= 8:
+                self._recorder.mark("t_stt_final")
         elif isinstance(frame, TranscriptionFrame) and frame.text:
             self._recorder.mark("t_stt_final")
 

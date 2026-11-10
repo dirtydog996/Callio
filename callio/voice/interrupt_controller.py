@@ -9,6 +9,7 @@ from pipecat.frames.frames import (
     TranscriptionFrame,
     TTSStartedFrame,
     TTSStoppedFrame,
+    UserStartedSpeakingFrame,
     VADUserStartedSpeakingFrame,
     VADUserStoppedSpeakingFrame,
 )
@@ -61,7 +62,7 @@ class InterruptController(FrameProcessor):
             self._assistant_speaking = False
             self._clear_candidate()
 
-        if isinstance(frame, VADUserStartedSpeakingFrame):
+        if isinstance(frame, (VADUserStartedSpeakingFrame, UserStartedSpeakingFrame)):
             self._vad_started_at = time.monotonic()
             if self._assistant_speaking and not self._aec_dampened():
                 if self._onset_ms <= 0:
