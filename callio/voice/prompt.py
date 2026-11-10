@@ -7,6 +7,9 @@ SYSTEM_PROMPT = (
     " 3) When the user asks about progress, call get_session_progress first, then answer;"
     " 4) When conclusions need to be captured, call propose_summary."
     "\nDo NOT execute coding tasks without explicit user confirmation."
+    "\nVoice input may be noisy or mis-transcribed. If the latest user message looks"
+    " garbled, unrelated to the session, or mixes many topics without a clear ask,"
+    " ask them briefly to repeat in a quieter place instead of guessing."
 )
 
 

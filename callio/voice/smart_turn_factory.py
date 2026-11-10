@@ -21,11 +21,23 @@ _LLM_DEVELOPER_ROLE_PROVIDERS = frozenset({"openai", "anthropic", "gemini"})
 def build_vad_analyzer(settings: Settings) -> SileroVADAnalyzer:
     return SileroVADAnalyzer(
         params=VADParams(
-            start_secs=0.2,
+            start_secs=0.18,
             stop_secs=settings.vad_stop_secs,
-            min_volume=0.2,
+            min_volume=0.25,
         )
     )
+
+
+def estimate_stt_ttfs_p99(settings: Settings) -> float:
+    """Rough TTFS P99 for pipecat turn timing (aligns with VAD + local STT)."""
+    backend = (settings.stt_backend or "whisper").strip().lower()
+    base = max(0.2, settings.vad_stop_secs) + 0.8
+    if backend == "sensevoice":
+        return base + 1.2 if settings.funasr_streaming else base + 2.0
+    model = (settings.whisper_model or "small").lower()
+    if model in {"tiny", "base"}:
+        return base + 1.0
+    return base + 1.6
 
 
 def build_smart_turn_analyzer(settings: Settings) -> LocalSmartTurnAnalyzerV3 | None:

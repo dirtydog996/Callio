@@ -23,6 +23,7 @@ from typing import Any
 import numpy as np
 
 from callio.config.settings import Settings
+from callio.voice.smart_turn_factory import estimate_stt_ttfs_p99
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +194,7 @@ def create_sensevoice_stt(settings: Settings):
                 )
 
     return SenseVoiceSTTService(
-        ttfs_p99_latency=3.0,
+        ttfs_p99_latency=estimate_stt_ttfs_p99(settings),
         settings=CallioWhisperSTTSettings(
             model=model_name,
             language=Language.ZH,

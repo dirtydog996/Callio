@@ -7,8 +7,19 @@ import threading
 from typing import Any
 
 from callio.config.settings import Settings
+from callio.voice.smart_turn_factory import estimate_stt_ttfs_p99
 
 logger = logging.getLogger(__name__)
+
+
+def _segment_passes_quality_checks(segment, settings: Settings) -> bool:
+    avg_logprob = getattr(segment, "avg_logprob", None)
+    if avg_logprob is not None and avg_logprob < settings.whisper_log_prob_threshold:
+        return False
+    ratio = getattr(segment, "compression_ratio", None)
+    if ratio is not None and ratio > settings.whisper_compression_ratio_max:
+        return False
+    return True
 
 _model: Any = None
 _model_key: str | None = None
@@ -146,6 +157,16 @@ def create_whisper_stt(settings: Settings):
                 yield ErrorFrame("Whisper model not available")
                 return
 
+            min_samples = int(
+                settings.audio_in_sample_rate * settings.whisper_min_segment_ms / 1000
+            )
+            if len(audio) < min_samples * 2:
+                logger.debug(
+                    "Skipping short segment (%d ms)",
+                    len(audio) // 2 * 1000 // settings.audio_in_sample_rate,
+                )
+                return
+
             await self.start_processing_metrics()
             text: str = ""
             exc: BaseException | None = None
@@ -163,6 +184,9 @@ def create_whisper_stt(settings: Settings):
                         "vad_filter": True,
                         "condition_on_previous_text": False,
                         "beam_size": max(1, settings.whisper_beam_size),
+                        "compression_ratio_threshold": settings.whisper_compression_ratio_max,
+                        "log_prob_threshold": settings.whisper_log_prob_threshold,
+                        "temperature": 0.0,
                     }
                     if prompt:
                         kwargs["initial_prompt"] = prompt
@@ -180,6 +204,7 @@ def create_whisper_stt(settings: Settings):
                     if (
                         no_speech_prob_threshold is not None
                         and segment.no_speech_prob < no_speech_prob_threshold
+                        and _segment_passes_quality_checks(segment, settings)
                     ):
                         text += f"{segment.text} "
             except Exception as e:
@@ -205,7 +230,7 @@ def create_whisper_stt(settings: Settings):
     return PreloadedWhisperSTTService(
         device=settings.whisper_device,
         compute_type=settings.whisper_compute_type,
-        ttfs_p99_latency=2.0,
+        ttfs_p99_latency=estimate_stt_ttfs_p99(settings),
         settings=CallioWhisperSTTSettings(
             model=settings.whisper_model,
             language=Language.ZH,

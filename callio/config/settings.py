@@ -45,13 +45,19 @@ class Settings:
     llm_base_url: str = os.getenv("CALLIO_LLM_BASE_URL", "")
     # Kept for backward compatibility; used as default base URL when llm_provider=ollama.
     ollama_base_url: str = os.getenv("CALLIO_OLLAMA_BASE_URL", "http://localhost:11434/v1")
-    whisper_model: str = os.getenv("CALLIO_WHISPER_MODEL", "base")
+    # ``small`` is a better Chinese default than ``base``; use ``base`` on very low-end CPUs.
+    whisper_model: str = os.getenv("CALLIO_WHISPER_MODEL", "small")
     whisper_device: str = os.getenv("CALLIO_WHISPER_DEVICE", "cpu")
     whisper_compute_type: str = os.getenv("CALLIO_WHISPER_COMPUTE_TYPE", "default")
     whisper_preload: bool = os.getenv("CALLIO_WHISPER_PRELOAD", "1") == "1"
     whisper_initial_prompt: str = os.getenv("CALLIO_WHISPER_INITIAL_PROMPT", "")
     whisper_hotwords: str = os.getenv("CALLIO_WHISPER_HOTWORDS", "")
     whisper_beam_size: int = int(os.getenv("CALLIO_WHISPER_BEAM_SIZE", "5"))
+    whisper_log_prob_threshold: float = float(os.getenv("CALLIO_WHISPER_LOG_PROB_THRESHOLD", "-0.7"))
+    whisper_compression_ratio_max: float = float(
+        os.getenv("CALLIO_WHISPER_COMPRESSION_RATIO_MAX", "2.2")
+    )
+    whisper_min_segment_ms: int = int(os.getenv("CALLIO_WHISPER_MIN_SEGMENT_MS", "400"))
     tts_backend: str = os.getenv("CALLIO_TTS_BACKEND", "chatt")
     tts_preload: bool = os.getenv("CALLIO_TTS_PRELOAD", "1") == "1"
     chatt_home: str = os.getenv("CALLIO_CHATTTS_HOME", "")
@@ -78,7 +84,7 @@ class Settings:
     global_max_parallel: int = int(os.getenv("CALLIO_GLOBAL_MAX_PARALLEL", "5"))
     execute_max_retries: int = int(os.getenv("CALLIO_EXECUTE_MAX_RETRIES", "3"))
     # VAD: seconds of silence after user stops speaking before sending to STT
-    vad_stop_secs: float = float(os.getenv("CALLIO_VAD_STOP_SECS", "0.4"))
+    vad_stop_secs: float = float(os.getenv("CALLIO_VAD_STOP_SECS", "0.25"))
     # STT backend: whisper (default) | sensevoice
     stt_backend: str = os.getenv("CALLIO_STT_BACKEND", "whisper")
     # FunASR / SenseVoice model name (used when stt_backend=sensevoice)
