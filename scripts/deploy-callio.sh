@@ -6,6 +6,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 MODE="${1:-local}"
+CHECK_ONLY="${CALLIO_DEPLOY_CHECK_ONLY:-0}"
+if [[ "${2:-}" == "--check" ]]; then
+  CHECK_ONLY=1
+fi
+PIP_PYPI="${CALLIO_PIP_FALLBACK_INDEX:-https://pypi.org/simple}"
 MODEL="${CALLIO_LLM_MODEL:-qwen2.5:7b}"
 VENV="${ROOT}/venv"
 PYTHON="${VENV}/bin/python"
@@ -47,12 +52,31 @@ fi
 
 # Use python -m pip so we never rely on venv/bin/pip shebang (can break like venv/bin/python).
 "$PYTHON" -m pip install -U pip wheel setuptools >/dev/null
-"$PYTHON" -m pip install -r requirements.txt
 
-# Pipecat Smart Turn v3 uses onnxruntime (bundled ONNX in pipecat package).
-"$PYTHON" -m pip install 'onnxruntime>=1.17.0' >/dev/null || true
+install_onnxruntime_for_pipecat() {
+  # pipecat-ai 1.x requires onnxruntime>=1.24.3; CN mirrors often stop at ~1.19.x.
+  if "$PYTHON" -m pip install 'onnxruntime>=1.24.3,<2' >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "==> onnxruntime>=1.24.3 not on current index; installing from ${PIP_PYPI}"
+  "$PYTHON" -m pip install 'onnxruntime>=1.24.3,<2' \
+    -i "${PIP_PYPI}" \
+    --trusted-host pypi.org \
+    --trusted-host files.pythonhosted.org
+}
 
-if [[ "${CALLIO_STT_BACKEND:-}" == "sensevoice" || "${CALLIO_FUNASR_STREAMING:-1}" == "1" ]]; then
+install_python_requirements() {
+  install_onnxruntime_for_pipecat
+  if ! "$PYTHON" -m pip install -r requirements.txt; then
+    echo "==> requirements.txt failed; retrying after onnxruntime bootstrap"
+    install_onnxruntime_for_pipecat
+    "$PYTHON" -m pip install -r requirements.txt
+  fi
+}
+
+install_python_requirements
+
+if [[ "${CALLIO_STT_BACKEND:-}" == "sensevoice" ]]; then
   echo "==> Installing FunASR (streaming SenseVoice / Paraformer-online)"
   "$PYTHON" -m pip install 'funasr>=1.1.0' 'modelscope>=1.14.0' 'huggingface_hub>=0.20.0' soundfile >/dev/null || {
     echo "WARN: FunASR optional deps failed; set CALLIO_STT_BACKEND=whisper to skip"
@@ -101,9 +125,16 @@ if [[ ! -s "${ROOT}/.env" ]] || ! grep -q CALLIO_LLM_MODEL "${ROOT}/.env"; then
 fi
 
 echo "==> Running unit tests"
+"$PYTHON" -m pip install -q pytest
 "$PYTHON" -m pytest tests/ -q --tb=no || {
   echo "WARN: some tests failed (optional models may be missing in CI)"
 }
+
+if [[ "$CHECK_ONLY" == "1" ]]; then
+  echo "==> Deploy check OK (venv + dependencies + tests)"
+  "$PYTHON" -c "import onnxruntime, pipecat; print('onnxruntime', onnxruntime.__version__)"
+  exit 0
+fi
 
 echo "==> Starting Callio on :${CALLIO_PORT:-8000}"
 exec "$PYTHON" -m callio
