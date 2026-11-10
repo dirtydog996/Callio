@@ -13,7 +13,7 @@ from pipecat.services.tts_service import TTSService
 from pipecat.transcriptions.language import Language
 
 from callio.config.settings import Settings, get_settings
-from callio.voice.audio_utils import iter_pcm_chunks, wav_to_pcm_bytes
+from callio.voice.audio_utils import iter_pcm_chunks, split_sentences, wav_to_pcm_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -118,18 +118,18 @@ def _create_say_tts(*, sample_rate: int) -> TTSService:
                 return
 
             try:
-                wav_bytes = await asyncio.to_thread(synthesize_say_wav, text, self._voice)
-                pcm = wav_to_pcm_bytes(wav_bytes, sample_rate)
-                if not pcm:
-                    yield None
-                    return
-                for chunk in iter_pcm_chunks(pcm, sample_rate):
-                    yield OutputAudioRawFrame(
-                        audio=chunk,
-                        sample_rate=sample_rate,
-                        num_channels=1,
-                    )
-                logger.info("Streamed assistant audio via say (%d bytes PCM)", len(pcm))
+                for sentence in split_sentences(text):
+                    wav_bytes = await asyncio.to_thread(synthesize_say_wav, sentence, self._voice)
+                    pcm = wav_to_pcm_bytes(wav_bytes, sample_rate)
+                    if not pcm:
+                        continue
+                    for chunk in iter_pcm_chunks(pcm, sample_rate):
+                        yield OutputAudioRawFrame(
+                            audio=chunk,
+                            sample_rate=sample_rate,
+                            num_channels=1,
+                        )
+                logger.info("Streamed assistant audio via say (sentence-chunked)")
             except Exception as exc:
                 logger.warning("macOS say TTS failed: %s", exc)
             yield None
@@ -155,17 +155,17 @@ def _create_chatt_tts(settings: Settings, *, sample_rate: int) -> TTSService:
                 return
 
             try:
-                pcm = await asyncio.to_thread(synthesize_chatt, text, self._runtime_settings)
-                if not pcm:
-                    yield None
-                    return
-                for chunk in iter_pcm_chunks(pcm, sample_rate):
-                    yield OutputAudioRawFrame(
-                        audio=chunk,
-                        sample_rate=sample_rate,
-                        num_channels=1,
-                    )
-                logger.info("Streamed assistant audio via ChatTTS (%d bytes PCM)", len(pcm))
+                for sentence in split_sentences(text):
+                    pcm = await asyncio.to_thread(synthesize_chatt, sentence, self._runtime_settings)
+                    if not pcm:
+                        continue
+                    for chunk in iter_pcm_chunks(pcm, sample_rate):
+                        yield OutputAudioRawFrame(
+                            audio=chunk,
+                            sample_rate=sample_rate,
+                            num_channels=1,
+                        )
+                logger.info("Streamed assistant audio via ChatTTS (sentence-chunked)")
             except Exception as exc:
                 logger.warning("ChatTTS failed: %s", exc)
             yield None

@@ -80,6 +80,13 @@ class Settings:
     stt_backend: str = os.getenv("CALLIO_STT_BACKEND", "whisper")
     # FunASR / SenseVoice model name (used when stt_backend=sensevoice)
     funasr_model: str = os.getenv("CALLIO_FUNASR_MODEL", "iic/SenseVoiceSmall")
+    funasr_streaming: bool = os.getenv("CALLIO_FUNASR_STREAMING", "1") == "1"
+    funasr_streaming_model: str = os.getenv(
+        "CALLIO_FUNASR_STREAMING_MODEL",
+        "iic/speech_paraformer_asr_nat-zh-cn-16k-common-vocab8404-online",
+    )
+    smart_turn_model_path: str = os.getenv("CALLIO_SMART_TURN_MODEL", "")
+    smart_turn_cpu_threads: int = int(os.getenv("CALLIO_SMART_TURN_CPU_THREADS", "1"))
     # EdgeTTS voice name (used when tts_backend=edge)
     edge_tts_voice: str = os.getenv("CALLIO_EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
     # CosyVoice REST API base URL (used when tts_backend=cosyvoice)
@@ -92,6 +99,17 @@ class Settings:
     notify_discord_webhook: str = os.getenv("CALLIO_NOTIFY_DISCORD_WEBHOOK", "")
     notify_telegram_webhook: str = os.getenv("CALLIO_NOTIFY_TELEGRAM_WEBHOOK", "")
     notify_timeout_sec: int = int(os.getenv("CALLIO_NOTIFY_TIMEOUT_SEC", "8"))
+    # Latency instrumentation and full-duplex tuning
+    latency_trace: bool = os.getenv("CALLIO_LATENCY_TRACE", "1") == "1"
+    latency_first_chunk_ms: int = int(os.getenv("CALLIO_LATENCY_FIRST_CHUNK_MS", "80"))
+    latency_subsequent_chunk_ms: int = int(os.getenv("CALLIO_LATENCY_SUBSEQUENT_CHUNK_MS", "200"))
+    aec_enabled: bool = os.getenv("CALLIO_AEC_ENABLED", "0") == "1"
+    aec_stream_delay_ms: int = int(os.getenv("CALLIO_AEC_STREAM_DELAY_MS", "40"))
+    aec_convergence_guard: bool = os.getenv("CALLIO_AEC_CONVERGENCE_GUARD", "1") == "1"
+    barge_in_onset_ms: int = int(os.getenv("CALLIO_BARGE_IN_ONSET_MS", "200"))
+    semantic_eou_enabled: bool = os.getenv("CALLIO_SEMANTIC_EOU", "1") == "1"
+    stt_stable_prefix_chars: int = int(os.getenv("CALLIO_STT_STABLE_PREFIX_CHARS", "10"))
+    latency_budget_enforce: bool = os.getenv("CALLIO_LATENCY_BUDGET_ENFORCE", "0") == "1"
 
     def validate_complete(self) -> None:
         """Compatibility hook for third-party service settings validation."""

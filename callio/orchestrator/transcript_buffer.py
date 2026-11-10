@@ -28,6 +28,14 @@ class TranscriptBuffer:
         self._last_summary_at: dict[str, float] = {}
         self._turn_counts: dict[str, int] = {}
 
+    def pop_last_assistant_line(self, session_id: str) -> bool:
+        bucket = self._lines.get(session_id, [])
+        for idx in range(len(bucket) - 1, -1, -1):
+            if bucket[idx].startswith("assistant:"):
+                bucket.pop(idx)
+                return True
+        return False
+
     def append(self, session_id: str, role: str, text: str) -> None:
         line = text.strip()
         if not line:

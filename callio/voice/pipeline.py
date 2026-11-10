@@ -16,6 +16,14 @@ from callio.voice.resume_context import build_resume_block
 from callio.voice.tools.handlers import create_tool_handlers
 from callio.voice.tools.schemas import all_tool_definitions
 from callio.voice.session_hook import SessionHook
+from callio.voice.latency import LatencyRecorder
+from callio.voice.latency_processor import LatencyProcessor
+from callio.voice.aec import EchoCanceller
+from callio.voice.aec_processor import AECConvergenceGuard, AECInputProcessor, AECReferenceProcessor
+from callio.voice.interrupt_controller import InterruptController
+from callio.voice.adaptive_output_chunker import AdaptiveOutputChunker
+from callio.voice.playback_commit_processor import PlaybackCommitProcessor
+from callio.voice.smart_turn_factory import build_user_aggregator_params
 from callio.voice.notifier import notify_session_finished
 from callio.voice.tts_loader import preload_tts, wait_for_tts
 from callio.voice.web_tts import create_tts
@@ -108,26 +116,23 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
         try:
             from pipecat.adapters.schemas.function_schema import FunctionSchema
             from pipecat.adapters.schemas.tools_schema import ToolsSchema
-            from pipecat.audio.vad.silero import SileroVADAnalyzer
-            from pipecat.audio.vad.vad_analyzer import VADParams
             from pipecat.frames.frames import (
                 ErrorFrame,
                 Frame,
                 InputAudioRawFrame,
+                InterimTranscriptionFrame,
                 InterruptionFrame,
                 OutputAudioRawFrame,
                 StartFrame,
                 TextFrame,
                 TranscriptionFrame,
                 TTSTextFrame,
-                VADUserStartedSpeakingFrame,
             )
             from pipecat.pipeline.pipeline import Pipeline
             from pipecat.pipeline.task import PipelineTask
             from pipecat.workers.runner import WorkerRunner
             from pipecat.processors.aggregators.llm_context import LLMContext
             from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
-            from pipecat.processors.audio.vad_processor import VADProcessor
             from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
             from pipecat.serializers.base_serializer import FrameSerializer
             from pipecat.services.ollama.llm import OLLamaLLMService, OllamaLLMSettings
@@ -171,13 +176,6 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                     return json.dumps({"type": "assistant", "text": frame.text})
                 return None
 
-        class BargeInProcessor(FrameProcessor):
-            async def process_frame(self, frame: Frame, direction: FrameDirection):
-                await super().process_frame(frame, direction)
-                if isinstance(frame, VADUserStartedSpeakingFrame):
-                    await self.broadcast_frame(InterruptionFrame)
-                await self.push_frame(frame, direction)
-
         class WebSocketUIProcessor(FrameProcessor):
             def __init__(self, ws: WebSocket, *, role: str, **kwargs):
                 super().__init__(**kwargs)
@@ -200,9 +198,16 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
                                 "detail": detail,
                             }, ensure_ascii=False)
                         )
+                    elif self._role == "user" and isinstance(frame, InterimTranscriptionFrame) and frame.text:
+                        await self._websocket.send_text(
+                            json.dumps(
+                                {"type": "transcription", "text": frame.text, "interim": True},
+                                ensure_ascii=False,
+                            )
+                        )
                     elif self._role == "user" and isinstance(frame, TranscriptionFrame) and frame.text:
                         await self._websocket.send_text(
-                            json.dumps({"type": "transcription", "text": frame.text}, ensure_ascii=False)
+                            json.dumps({"type": "transcription", "text": frame.text, "final": True}, ensure_ascii=False)
                         )
                     elif self._role == "assistant" and isinstance(frame, (TextFrame, TTSTextFrame)) and frame.text:
                         await self._websocket.send_text(
@@ -261,12 +266,6 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             ),
         )
 
-        vad = VADProcessor(
-            vad_analyzer=SileroVADAnalyzer(
-                params=VADParams(start_secs=0.2, stop_secs=runtime_settings.vad_stop_secs, min_volume=0.2)
-            )
-        )
-
         stt = _create_stt(runtime_settings)
 
         llm = build_voice_llm_service(runtime_settings)
@@ -311,24 +310,73 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
             }, *history_messages],
             tools=ToolsSchema(standard_tools=tool_schemas) if orchestrator else None,
         )
-        context_aggregator = LLMContextAggregatorPair(context)
+        user_params = build_user_aggregator_params(runtime_settings)
+        context_aggregator = LLMContextAggregatorPair(context, user_params=user_params)
+
+        latency_recorder = LatencyRecorder()
+
+        async def _emit_latency(payload: dict) -> None:
+            try:
+                await websocket.send_text(json.dumps(payload, ensure_ascii=False))
+            except Exception as exc:
+                logger.debug("Failed to push latency event: %s", exc)
+
+        latency_upstream = LatencyProcessor(
+            latency_recorder,
+            emit_event=_emit_latency if runtime_settings.latency_trace else None,
+        )
+        latency_downstream = LatencyProcessor(latency_recorder, emit_event=None)
+
+        aec = EchoCanceller(runtime_settings, sample_rate=runtime_settings.audio_in_sample_rate)
+        aec_guard = AECConvergenceGuard(runtime_settings, aec)
+
+        def _mark_first_audio_sent() -> None:
+            if latency_recorder.is_unset("t_audio_sent"):
+                latency_recorder.mark("t_audio_sent")
+
+        interrupt_controller = InterruptController(
+            runtime_settings,
+            convergence_guard=aec_guard,
+            on_interrupt_detected=latency_upstream.mark_interrupt,
+            on_audio_stopped=latency_upstream.mark_audio_stopped,
+        )
+
+        session_hook: SessionHook | None = None
+        playback_commit: PlaybackCommitProcessor | None = None
 
         processors = [
             transport.input(),
-            vad,
-            BargeInProcessor(),
+            AECInputProcessor(aec, aec_guard),
+            interrupt_controller,
+            latency_upstream,
             stt,
             WebSocketUIProcessor(websocket, role="user"),
+            context_aggregator.user(),
         ]
         if orchestrator is not None and session_id:
-            processors.append(
-                SessionHook(orchestrator, session_id, context, runtime_settings, memory_hub=memory_hub)
+            session_hook = SessionHook(
+                orchestrator, session_id, context, runtime_settings, memory_hub=memory_hub
             )
+            processors.append(session_hook)
         processors.extend([
-            context_aggregator.user(),
             llm,
+            latency_downstream,
             WebSocketUIProcessor(websocket, role="assistant"),
             tts,
+            AECReferenceProcessor(aec, aec_guard),
+            AdaptiveOutputChunker(
+                runtime_settings,
+                interrupt_controller=interrupt_controller,
+                on_audio_sent=_mark_first_audio_sent,
+            ),
+        ])
+        if session_hook is not None:
+            playback_commit = PlaybackCommitProcessor(
+                session_hook.playback_tracker,
+                on_commit=session_hook.commit_assistant_line,
+            )
+            processors.append(playback_commit)
+        processors.extend([
             transport.output(),
             context_aggregator.assistant(),
         ])

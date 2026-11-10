@@ -64,7 +64,7 @@ async def preload_funasr(settings: Settings) -> None:
     async with _get_preload_lock():
         if _ready.is_set():
             return
-        model_name = settings.funasr_model or "iic/SenseVoiceSmall"
+        model_name = resolve_funasr_model_name(settings)
         with _lock:
             if _model is not None and _model_key == model_name:
                 _ready.set()
@@ -115,8 +115,18 @@ def _transcribe_sync(model: Any, audio_int16: bytes, sample_rate: int) -> str:
     return text
 
 
+def resolve_funasr_model_name(settings: Settings) -> str:
+    if settings.funasr_streaming:
+        return (settings.funasr_streaming_model or settings.funasr_model or "iic/SenseVoiceSmall").strip()
+    return settings.funasr_model or "iic/SenseVoiceSmall"
+
+
 def create_sensevoice_stt(settings: Settings):
     """Return a Pipecat-compatible SenseVoice STT service."""
+    if settings.funasr_streaming:
+        from callio.voice.funasr_streaming import create_streaming_sensevoice_stt
+
+        return create_streaming_sensevoice_stt(settings)
     from collections.abc import AsyncGenerator
 
     from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
