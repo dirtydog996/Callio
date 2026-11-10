@@ -17,20 +17,33 @@ PYTHON="${VENV}/bin/python"
 
 echo "==> Callio deploy ($MODE)"
 
+_python_version_ok() {
+  local py="$1"
+  "$py" -c 'import sys; v=sys.version_info; sys.exit(0 if v>=(3,11) else 1)' 2>/dev/null
+}
+
 _pick_python() {
-  if command -v python3 >/dev/null 2>&1; then
+  local py
+  for py in python3.12 python3.11; do
+    if command -v "$py" >/dev/null 2>&1 && _python_version_ok "$py"; then
+      command -v "$py"
+      return 0
+    fi
+  done
+  if command -v python3 >/dev/null 2>&1 && _python_version_ok python3; then
     echo python3
-  elif command -v python >/dev/null 2>&1; then
+  elif command -v python >/dev/null 2>&1 && _python_version_ok python; then
     echo python
   else
-    echo "ERROR: python3 not found; install Python 3.10+" >&2
+    echo "ERROR: Python 3.11+ is required (pipecat-ai>=1.2.1). Install it and re-run." >&2
     exit 1
   fi
 }
 
 venv_is_healthy() {
   [[ -x "$PYTHON" ]] || return 1
-  "$PYTHON" -c "import sys" >/dev/null 2>&1
+  "$PYTHON" -c "import sys" >/dev/null 2>&1 || return 1
+  "$PYTHON" -c 'import sys; v=sys.version_info; sys.exit(0 if v>=(3,11) else 1)' >/dev/null 2>&1
 }
 
 SYS_PY="$(_pick_python)"
@@ -127,7 +140,9 @@ if [[ "$MODE" == "docker" ]]; then
   exit 0
 fi
 
-if command -v ollama >/dev/null 2>&1; then
+if [[ "${CALLIO_SKIP_OLLAMA_PULL:-0}" == "1" ]]; then
+  echo "==> Skipping Ollama model pull (CALLIO_SKIP_OLLAMA_PULL=1); pull $MODEL manually before first use"
+elif command -v ollama >/dev/null 2>&1; then
   echo "==> Pulling Ollama model: $MODEL"
   ollama pull "$MODEL" || true
 else
