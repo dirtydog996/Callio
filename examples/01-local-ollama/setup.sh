@@ -1,16 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL="${1:-qwen2.5:7b}"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+export CALLIO_LLM_MODEL="${1:-qwen2.5:7b}"
+export CALLIO_STT_BACKEND="${CALLIO_STT_BACKEND:-sensevoice}"
+export CALLIO_FUNASR_STREAMING="${CALLIO_FUNASR_STREAMING:-1}"
+export CALLIO_SEMANTIC_EOU="${CALLIO_SEMANTIC_EOU:-1}"
 
-if ! command -v ollama >/dev/null 2>&1; then
-  echo "ollama is not installed. Install: https://ollama.com"
-  exit 1
-fi
-
-ollama serve >/dev/null 2>&1 &
-OLLAMA_PID=$!
-trap 'kill "$OLLAMA_PID" >/dev/null 2>&1 || true' EXIT
-
-ollama pull "$MODEL"
-echo "Ready. Use examples/01-local-ollama/.env.example and set CALLIO_LLM_MODEL=$MODEL"
+exec "${ROOT}/scripts/deploy-callio.sh" local
