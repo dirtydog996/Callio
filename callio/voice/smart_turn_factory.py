@@ -14,6 +14,9 @@ from callio.config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
+# Pipecat empty-turn recovery injects role=developer; many OpenAI-compatible APIs reject it.
+_LLM_DEVELOPER_ROLE_PROVIDERS = frozenset({"openai", "anthropic", "gemini"})
+
 
 def build_vad_analyzer(settings: Settings) -> SileroVADAnalyzer:
     return SileroVADAnalyzer(
@@ -51,8 +54,16 @@ def build_user_aggregator_params(settings: Settings) -> LLMUserAggregatorParams:
         start=default_user_turn_start_strategies(),
         stop=stop,
     )
+    provider = (settings.llm_provider or "ollama").strip().lower()
+    empty_user_turn = None
+    if provider in _LLM_DEVELOPER_ROLE_PROVIDERS:
+        from pipecat.turns.empty_user_turn import EmptyUserTurnConfig
+
+        empty_user_turn = EmptyUserTurnConfig()
+
     return LLMUserAggregatorParams(
         vad_analyzer=vad,
         user_turn_strategies=strategies,
         audio_idle_timeout=1.0,
+        empty_user_turn=empty_user_turn,
     )

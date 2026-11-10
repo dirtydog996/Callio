@@ -56,8 +56,8 @@ class CallioWhisperSTTSettings(STTSettings):
     """Whisper-style STT settings used by Callio local backends."""
 
     no_speech_prob: float | NotGiven = field(default_factory=lambda: NOT_GIVEN)
-    hotwords: str | None | NotGiven = field(default_factory=lambda: NOT_GIVEN)
-    initial_prompt: str | None | NotGiven = field(default_factory=lambda: NOT_GIVEN)
+    hotwords: str | None | NotGiven = None
+    initial_prompt: str | None | NotGiven = None
 
 
 class CallioSegmentedSTTService(SegmentedSTTService):
@@ -80,8 +80,15 @@ class CallioSegmentedSTTService(SegmentedSTTService):
             model="base",
             language=Language.ZH,
             no_speech_prob=0.6,
+            hotwords=None,
+            initial_prompt=None,
         )
         if settings is not None:
             default_settings.apply_update(settings)
         super().__init__(settings=default_settings, ttfs_p99_latency=ttfs_p99_latency, **kwargs)
         self._model = None
+
+    async def _handle_transcription(
+        self, transcript: str, is_final: bool, language: Language | None = None
+    ) -> None:
+        """Pipecat WhisperSTTService hook for tracing; transcripts are pushed as frames."""

@@ -18,3 +18,19 @@ def test_user_params_without_semantic_eou():
     assert params.vad_analyzer is not None
     assert params.user_turn_strategies is not None
     assert len(params.user_turn_strategies.stop or []) == 1
+
+
+def test_deepseek_disables_developer_empty_turn_recovery():
+    settings = replace(Settings(), llm_provider="deepseek")
+    params = build_user_aggregator_params(settings)
+    assert params.empty_user_turn is None
+
+
+def test_callio_whisper_settings_validate():
+    from callio.voice.segmented_stt import CallioWhisperSTTSettings
+
+    CallioWhisperSTTSettings(
+        model="base",
+        hotwords=None,
+        initial_prompt=None,
+    ).validate_complete()

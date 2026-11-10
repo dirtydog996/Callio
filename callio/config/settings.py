@@ -49,6 +49,9 @@ class Settings:
     whisper_device: str = os.getenv("CALLIO_WHISPER_DEVICE", "cpu")
     whisper_compute_type: str = os.getenv("CALLIO_WHISPER_COMPUTE_TYPE", "default")
     whisper_preload: bool = os.getenv("CALLIO_WHISPER_PRELOAD", "1") == "1"
+    whisper_initial_prompt: str = os.getenv("CALLIO_WHISPER_INITIAL_PROMPT", "")
+    whisper_hotwords: str = os.getenv("CALLIO_WHISPER_HOTWORDS", "")
+    whisper_beam_size: int = int(os.getenv("CALLIO_WHISPER_BEAM_SIZE", "5"))
     tts_backend: str = os.getenv("CALLIO_TTS_BACKEND", "chatt")
     tts_preload: bool = os.getenv("CALLIO_TTS_PRELOAD", "1") == "1"
     chatt_home: str = os.getenv("CALLIO_CHATTTS_HOME", "")

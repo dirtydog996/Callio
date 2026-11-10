@@ -198,5 +198,7 @@ def create_sensevoice_stt(settings: Settings):
             model=model_name,
             language=Language.ZH,
             no_speech_prob=0.6,
+            hotwords=None,
+            initial_prompt=None,
         ),
     )

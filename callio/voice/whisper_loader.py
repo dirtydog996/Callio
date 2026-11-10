@@ -156,7 +156,19 @@ def create_whisper_stt(settings: Settings):
                 whisper_lang = language_to_whisper_language(language) if language else None
 
                 def _transcribe_sync():
-                    segs, _ = self._model.transcribe(audio_float, language=whisper_lang)
+                    prompt = (settings.whisper_initial_prompt or "").strip() or None
+                    hotwords = (settings.whisper_hotwords or "").strip() or None
+                    kwargs: dict = {
+                        "language": whisper_lang,
+                        "vad_filter": True,
+                        "condition_on_previous_text": False,
+                        "beam_size": max(1, settings.whisper_beam_size),
+                    }
+                    if prompt:
+                        kwargs["initial_prompt"] = prompt
+                    if hotwords:
+                        kwargs["hotwords"] = hotwords
+                    segs, _ = self._model.transcribe(audio_float, **kwargs)
                     return list(segs)
 
                 segments = await asyncio.to_thread(_transcribe_sync)
@@ -198,5 +210,7 @@ def create_whisper_stt(settings: Settings):
             model=settings.whisper_model,
             language=Language.ZH,
             no_speech_prob=0.6,
+            hotwords=None,
+            initial_prompt=settings.whisper_initial_prompt or None,
         ),
     )
