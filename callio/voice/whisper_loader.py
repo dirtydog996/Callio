@@ -101,13 +101,14 @@ def create_whisper_stt(settings: Settings):
 
     import numpy as np
     from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
-    from pipecat.services.whisper.stt import (
-        WhisperSTTService,
-        WhisperSTTSettings,
-        language_to_whisper_language,
-    )
     from pipecat.transcriptions.language import Language
     from pipecat.utils.time import time_now_iso8601
+
+    from callio.voice.segmented_stt import (
+        CallioSegmentedSTTService,
+        CallioWhisperSTTSettings,
+        language_to_whisper_language,
+    )
 
     def _assert_given(value, name: str = "value"):
         if value is None:
@@ -116,7 +117,13 @@ def create_whisper_stt(settings: Settings):
 
     apply_hf_mirror(settings)
 
-    class PreloadedWhisperSTTService(WhisperSTTService):
+    class PreloadedWhisperSTTService(CallioSegmentedSTTService):
+        def __init__(self, *, device: str, compute_type: str, **kwargs) -> None:
+            self._device = device
+            self._compute_type = compute_type
+            super().__init__(**kwargs)
+            self._load()
+
         def _load(self) -> None:
             key = _model_cache_key(settings)
             with _lock:
@@ -124,7 +131,15 @@ def create_whisper_stt(settings: Settings):
                     self._model = _model
                     logger.debug("Reusing preloaded Whisper model")
                     return
-            super()._load()
+            from faster_whisper import WhisperModel
+
+            model_name = settings.whisper_model
+            logger.info("Loading Whisper model on demand: %s", model_name)
+            self._model = WhisperModel(
+                model_name,
+                device=self._device,
+                compute_type=self._compute_type,
+            )
 
         async def run_stt(self, audio: bytes) -> AsyncGenerator[Frame, None]:
             if not self._model:
@@ -179,7 +194,7 @@ def create_whisper_stt(settings: Settings):
         device=settings.whisper_device,
         compute_type=settings.whisper_compute_type,
         ttfs_p99_latency=2.0,
-        settings=WhisperSTTSettings(
+        settings=CallioWhisperSTTSettings(
             model=settings.whisper_model,
             language=Language.ZH,
             no_speech_prob=0.6,

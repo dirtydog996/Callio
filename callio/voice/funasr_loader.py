@@ -130,13 +130,10 @@ def create_sensevoice_stt(settings: Settings):
     from collections.abc import AsyncGenerator
 
     from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
-    from pipecat.services.whisper.stt import (
-        WhisperSTTService,
-        WhisperSTTSettings,
-        language_to_whisper_language,
-    )
     from pipecat.transcriptions.language import Language
     from pipecat.utils.time import time_now_iso8601
+
+    from callio.voice.segmented_stt import CallioSegmentedSTTService, CallioWhisperSTTSettings
 
     def _assert_given(value, name: str = "value"):
         if value is None:
@@ -145,9 +142,13 @@ def create_sensevoice_stt(settings: Settings):
 
     model_name = settings.funasr_model or "iic/SenseVoiceSmall"
 
-    class SenseVoiceSTTService(WhisperSTTService):
+    class SenseVoiceSTTService(CallioSegmentedSTTService):
         """Replaces Whisper inference with FunASR/SenseVoice while keeping
         the pipecat VAD + buffering pipeline intact."""
+
+        def __init__(self, **kwargs) -> None:
+            super().__init__(**kwargs)
+            self._load()
 
         def _load(self) -> None:
             global _model, _model_key
@@ -192,10 +193,8 @@ def create_sensevoice_stt(settings: Settings):
                 )
 
     return SenseVoiceSTTService(
-        device="cpu",
-        compute_type="default",
         ttfs_p99_latency=3.0,
-        settings=WhisperSTTSettings(
+        settings=CallioWhisperSTTSettings(
             model=model_name,
             language=Language.ZH,
             no_speech_prob=0.6,
