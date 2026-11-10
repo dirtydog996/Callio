@@ -101,7 +101,7 @@ def create_whisper_stt(settings: Settings):
 
     import numpy as np
     from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
-    from pipecat.services.settings import assert_given
+    from pipecat.utils.types import assert_given
     from pipecat.services.whisper.stt import (
         WhisperSTTService,
         WhisperSTTSettings,

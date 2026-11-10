@@ -1,6 +1,10 @@
 """Unit tests for callio.voice.pipeline helper functions."""
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.isolated
+
 import asyncio
 import importlib.util
 import pathlib

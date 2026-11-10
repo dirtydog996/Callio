@@ -9,22 +9,14 @@ import unittest
 from unittest.mock import MagicMock
 
 # Stub heavy optional dependencies
+from tests._stub_helpers import stub_if_missing
+
 for _stub in ("openai", "chromadb", "fastapi", "starlette", "pipecat"):
-    if _stub not in sys.modules:
-        _m = MagicMock()
-        _m.__spec__ = None
-        sys.modules[_stub] = _m
+    stub_if_missing(_stub)
 
 _openai = sys.modules["openai"]
 if not hasattr(_openai, "AsyncOpenAI"):
     _openai.AsyncOpenAI = MagicMock()
-
-# Stub callio.voice package to prevent loading pipeline.py
-_voice_pkg = MagicMock()
-_voice_pkg.__path__ = [str(pathlib.Path(__file__).parent.parent / "callio" / "voice")]
-_voice_pkg.__package__ = "callio.voice"
-sys.modules["callio.voice"] = _voice_pkg
-
 
 def _load_voice_mod(name: str):
     """Load a callio.voice.* module directly, bypassing the package __init__."""

@@ -2,22 +2,16 @@
 from __future__ import annotations
 
 import shutil
-import unittest
-from unittest.mock import patch
-
 import sys
 import types
 import unittest
 from unittest.mock import MagicMock, patch
 
 # Stub heavy optional dependencies before importing callio.worker
+from tests._stub_helpers import stub_if_missing
+
 for _stub in ("openai", "pipecat", "chromadb"):
-    if _stub not in sys.modules:
-        _m = MagicMock()
-        _m.__spec__ = None
-        sys.modules[_stub] = _m
-        # Ensure sub-attribute imports resolve to mocks
-        sys.modules[f"{_stub}.AsyncOpenAI"] = _m
+    stub_if_missing(_stub)
 
 # openai.AsyncOpenAI specifically
 _openai = sys.modules["openai"]

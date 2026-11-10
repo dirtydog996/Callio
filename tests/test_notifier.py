@@ -9,24 +9,14 @@ from unittest.mock import MagicMock, patch
 
 from callio.config.settings import Settings
 
+from tests._stub_helpers import stub_if_missing
+
 for _stub in ("openai", "chromadb", "fastapi", "starlette", "pipecat"):
-    if _stub not in sys.modules:
-        _m = MagicMock()
-        _m.__spec__ = None
-        sys.modules[_stub] = _m
+    stub_if_missing(_stub)
 
 _openai = sys.modules["openai"]
 if not hasattr(_openai, "AsyncOpenAI"):
     _openai.AsyncOpenAI = MagicMock()
-
-_voice_pkg = MagicMock()
-_voice_pkg.__path__ = [str(pathlib.Path(__file__).parent.parent / "callio" / "voice")]
-_voice_pkg.__package__ = "callio.voice"
-sys.modules["callio.voice"] = _voice_pkg
-
-import callio as _callio_mod
-_callio_mod.voice = _voice_pkg
-
 
 def _load_notifier_module():
     base = pathlib.Path(__file__).parent.parent / "callio" / "voice" / "notifier.py"
@@ -38,7 +28,6 @@ def _load_notifier_module():
 
 
 _notifier = _load_notifier_module()
-_voice_pkg.notifier = _notifier
 build_session_notification_payload = _notifier.build_session_notification_payload
 notify_session_finished = _notifier.notify_session_finished
 

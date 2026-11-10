@@ -11,11 +11,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Stub heavy optional dependencies before importing callio.worker
+from tests._stub_helpers import stub_if_missing
+
 for _stub in ("openai", "pipecat", "chromadb"):
-    if _stub not in sys.modules:
-        _m = MagicMock()
-        _m.__spec__ = None
-        sys.modules[_stub] = _m
+    stub_if_missing(_stub)
 
 _openai = sys.modules["openai"]
 if not hasattr(_openai, "AsyncOpenAI"):

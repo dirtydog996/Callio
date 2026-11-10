@@ -114,8 +114,8 @@ def register_voice_routes(app: FastAPI, settings: Settings | None = None) -> Non
         history_messages: list[dict[str, str]] = []
 
         try:
-            from pipecat.adapters.schemas.function_schema import FunctionSchema
-            from pipecat.adapters.schemas.tools_schema import ToolsSchema
+            from pipecat.adapters.llm.schemas.function_schema import FunctionSchema
+            from pipecat.adapters.llm.schemas.tools_schema import ToolsSchema
             from pipecat.frames.frames import (
                 ErrorFrame,
                 Frame,

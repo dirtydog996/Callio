@@ -130,7 +130,7 @@ def create_sensevoice_stt(settings: Settings):
     from collections.abc import AsyncGenerator
 
     from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
-    from pipecat.services.settings import assert_given
+    from pipecat.utils.types import assert_given
     from pipecat.services.whisper.stt import (
         WhisperSTTService,
         WhisperSTTSettings,
