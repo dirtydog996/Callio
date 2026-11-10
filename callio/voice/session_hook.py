@@ -5,11 +5,19 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from pipecat.frames.frames import Frame, InterruptionFrame, TextFrame, TranscriptionFrame, TTSTextFrame
+from pipecat.frames.frames import (
+    Frame,
+    InterruptionFrame,
+    TextFrame,
+    TranscriptionFrame,
+    TTSTextFrame,
+    TTSStoppedFrame,
+)
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from callio.config.settings import Settings, get_settings
 from callio.voice.context_updater import refresh_system_prompt
+from callio.voice.playback_commit import PlaybackCommitTracker
 
 if TYPE_CHECKING:
     from callio.orchestrator import Orchestrator
@@ -44,6 +52,14 @@ class SessionHook(FrameProcessor):
         # Tracks node_ids whose results have already been reported to the user
         # so we only surface each completion once per voice session.
         self._announced_completions: set[str] = set()
+        self._playback = PlaybackCommitTracker()
+
+    @property
+    def playback_tracker(self) -> PlaybackCommitTracker:
+        return self._playback
+
+    def commit_assistant_line(self, text: str) -> None:
+        self._orchestrator.transcripts.append(self._session_id, "assistant", text)
 
     def _collect_new_completions(self) -> list[dict]:
         """Return completed tasks with results not yet announced in this session."""
@@ -94,9 +110,16 @@ class SessionHook(FrameProcessor):
                         )
                 await self._orchestrator.transcripts.maybe_schedule_summary(self._session_id)
             elif isinstance(frame, (TextFrame, TTSTextFrame)) and frame.text:
-                self._orchestrator.transcripts.append(self._session_id, "assistant", frame.text)
+                self._playback.queue_assistant_text(frame.text)
+            elif isinstance(frame, TTSStoppedFrame):
+                for line in self._playback.drain_pending_for_commit():
+                    self._orchestrator.transcripts.append(self._session_id, "assistant", line)
+                self._playback.on_tts_stopped()
             elif isinstance(frame, InterruptionFrame):
                 logger.debug("Barge-in: user interrupted assistant")
+                self._playback.cancel_uncommitted()
+                if self._orchestrator.transcripts.pop_last_assistant_line(self._session_id):
+                    logger.debug("Rolled back unplayed assistant transcript line after barge-in")
         except Exception as exc:
             logger.warning("Session hook failed: %s", exc)
         await self.push_frame(frame, direction)

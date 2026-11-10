@@ -92,6 +92,17 @@ class Settings:
     notify_discord_webhook: str = os.getenv("CALLIO_NOTIFY_DISCORD_WEBHOOK", "")
     notify_telegram_webhook: str = os.getenv("CALLIO_NOTIFY_TELEGRAM_WEBHOOK", "")
     notify_timeout_sec: int = int(os.getenv("CALLIO_NOTIFY_TIMEOUT_SEC", "8"))
+    # Latency instrumentation and full-duplex tuning
+    latency_trace: bool = os.getenv("CALLIO_LATENCY_TRACE", "1") == "1"
+    latency_first_chunk_ms: int = int(os.getenv("CALLIO_LATENCY_FIRST_CHUNK_MS", "80"))
+    latency_subsequent_chunk_ms: int = int(os.getenv("CALLIO_LATENCY_SUBSEQUENT_CHUNK_MS", "200"))
+    aec_enabled: bool = os.getenv("CALLIO_AEC_ENABLED", "0") == "1"
+    aec_stream_delay_ms: int = int(os.getenv("CALLIO_AEC_STREAM_DELAY_MS", "40"))
+    aec_convergence_guard: bool = os.getenv("CALLIO_AEC_CONVERGENCE_GUARD", "1") == "1"
+    barge_in_onset_ms: int = int(os.getenv("CALLIO_BARGE_IN_ONSET_MS", "200"))
+    semantic_eou_enabled: bool = os.getenv("CALLIO_SEMANTIC_EOU", "0") == "1"
+    stt_stable_prefix_chars: int = int(os.getenv("CALLIO_STT_STABLE_PREFIX_CHARS", "10"))
+    latency_budget_enforce: bool = os.getenv("CALLIO_LATENCY_BUDGET_ENFORCE", "0") == "1"
 
     def validate_complete(self) -> None:
         """Compatibility hook for third-party service settings validation."""

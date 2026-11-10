@@ -44,6 +44,19 @@ def wav_to_pcm_bytes(wav_bytes: bytes, target_rate: int) -> bytes:
     return float32_to_pcm_bytes(samples, source_rate=source_rate, target_rate=target_rate)
 
 
+_SENTENCE_BOUNDARY_RE = None
+
+
+def split_sentences(text: str) -> list[str]:
+    import re
+
+    global _SENTENCE_BOUNDARY_RE
+    if _SENTENCE_BOUNDARY_RE is None:
+        _SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[。！？!?；;])\s*")
+    parts = [p.strip() for p in _SENTENCE_BOUNDARY_RE.split(text.strip()) if p.strip()]
+    return parts or ([text.strip()] if text.strip() else [])
+
+
 def iter_pcm_chunks(pcm: bytes, sample_rate: int, *, chunk_ms: int = _CHUNK_MS) -> list[bytes]:
     bytes_per_chunk = int(sample_rate * (chunk_ms / 1000.0) * 2)
     bytes_per_chunk = max(bytes_per_chunk, 2)
