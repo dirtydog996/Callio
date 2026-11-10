@@ -35,8 +35,8 @@ scipy>=1.12.0
 #   启用: CALLIO_AEC_ENABLED=1  CALLIO_AEC_CONVERGENCE_GUARD=1
 # pywebrtc-audio>=0.2.0
 
-# onnxruntime>=1.24.3 is pulled in by pipecat-ai (Smart Turn EOU). deploy-callio.sh
-# pre-installs it from PyPI when your mirror (e.g. Aliyun) only has older builds.
+# onnxruntime: declared by pipecat-ai (>=1.24.3). deploy-callio.sh installs it first;
+# on platforms with wheels only up to 1.19.x, pipecat is installed with --no-deps.
 
 # 日志
 loguru>=0.7.0

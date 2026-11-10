@@ -53,23 +53,37 @@ fi
 # Use python -m pip so we never rely on venv/bin/pip shebang (can break like venv/bin/python).
 "$PYTHON" -m pip install -U pip wheel setuptools >/dev/null
 
+ORT_LEGACY=0
+
 install_onnxruntime_for_pipecat() {
-  # pipecat-ai 1.x requires onnxruntime>=1.24.3; CN mirrors often stop at ~1.19.x.
+  # pipecat metadata requires onnxruntime>=1.24.3; some mirrors and some OS/Python
+  # combos only publish wheels up to ~1.19.x (common on older macOS builds).
   if "$PYTHON" -m pip install 'onnxruntime>=1.24.3,<2' >/dev/null 2>&1; then
+    ORT_LEGACY=0
     return 0
   fi
-  echo "==> onnxruntime>=1.24.3 not on current index; installing from ${PIP_PYPI}"
-  "$PYTHON" -m pip install 'onnxruntime>=1.24.3,<2' \
-    -i "${PIP_PYPI}" \
+  echo "==> Trying onnxruntime>=1.24.3 from ${PIP_PYPI} only (bypass mirror)"
+  if "$PYTHON" -m pip install 'onnxruntime>=1.24.3,<2' \
+    --index-url "${PIP_PYPI}" \
     --trusted-host pypi.org \
-    --trusted-host files.pythonhosted.org
+    --trusted-host files.pythonhosted.org >/dev/null 2>&1; then
+    ORT_LEGACY=0
+    return 0
+  fi
+  echo "==> No onnxruntime>=1.24.3 wheel for this platform; installing onnxruntime 1.19.x"
+  echo "    (pipecat will be installed with --no-deps; Smart Turn v3 still works on 1.19.x)"
+  "$PYTHON" -m pip install 'onnxruntime>=1.17.0,<=1.19.2'
+  ORT_LEGACY=1
 }
 
 install_python_requirements() {
   install_onnxruntime_for_pipecat
-  if ! "$PYTHON" -m pip install -r requirements.txt; then
-    echo "==> requirements.txt failed; retrying after onnxruntime bootstrap"
-    install_onnxruntime_for_pipecat
+  if [[ "$ORT_LEGACY" == "1" ]]; then
+    local req_nopipe="${ROOT}/.callio-requirements-no-pipecat.txt"
+    grep -v -E '^[[:space:]]*pipecat-ai' "${ROOT}/requirements.txt" >"${req_nopipe}"
+    "$PYTHON" -m pip install -r "${req_nopipe}"
+    "$PYTHON" -m pip install 'pipecat-ai>=1.2.1' --no-deps
+  else
     "$PYTHON" -m pip install -r requirements.txt
   fi
 }
@@ -132,7 +146,14 @@ echo "==> Running unit tests"
 
 if [[ "$CHECK_ONLY" == "1" ]]; then
   echo "==> Deploy check OK (venv + dependencies + tests)"
-  "$PYTHON" -c "import onnxruntime, pipecat; print('onnxruntime', onnxruntime.__version__)"
+  "$PYTHON" -c "
+import onnxruntime, pipecat
+from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
+print('onnxruntime', onnxruntime.__version__)
+print('pipecat', pipecat.__version__)
+LocalSmartTurnAnalyzerV3()
+print('smart_turn_v3', 'ok')
+"
   exit 0
 fi
 
