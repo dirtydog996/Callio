@@ -130,7 +130,6 @@ def create_sensevoice_stt(settings: Settings):
     from collections.abc import AsyncGenerator
 
     from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
-    from pipecat.utils.types import assert_given
     from pipecat.services.whisper.stt import (
         WhisperSTTService,
         WhisperSTTSettings,
@@ -138,6 +137,11 @@ def create_sensevoice_stt(settings: Settings):
     )
     from pipecat.transcriptions.language import Language
     from pipecat.utils.time import time_now_iso8601
+
+    def _assert_given(value, name: str = "value"):
+        if value is None:
+            raise ValueError(f"{name} is required")
+        return value
 
     model_name = settings.funasr_model or "iic/SenseVoiceSmall"
 
@@ -178,7 +182,7 @@ def create_sensevoice_stt(settings: Settings):
             await self.stop_processing_metrics()
             if text:
                 logger.info("SenseVoice transcription: %s", text)
-                language = assert_given(self._settings.language)
+                language = _assert_given(self._settings.language, "language")
                 await self._handle_transcription(text, True, language)
                 yield TranscriptionFrame(
                     text,

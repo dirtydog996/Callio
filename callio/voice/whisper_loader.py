@@ -101,7 +101,6 @@ def create_whisper_stt(settings: Settings):
 
     import numpy as np
     from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
-    from pipecat.utils.types import assert_given
     from pipecat.services.whisper.stt import (
         WhisperSTTService,
         WhisperSTTSettings,
@@ -109,6 +108,11 @@ def create_whisper_stt(settings: Settings):
     )
     from pipecat.transcriptions.language import Language
     from pipecat.utils.time import time_now_iso8601
+
+    def _assert_given(value, name: str = "value"):
+        if value is None:
+            raise ValueError(f"{name} is required")
+        return value
 
     apply_hf_mirror(settings)
 
@@ -133,7 +137,7 @@ def create_whisper_stt(settings: Settings):
             try:
                 audio_float = np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0
 
-                language = assert_given(self._settings.language)
+                language = _assert_given(self._settings.language, "language")
                 whisper_lang = language_to_whisper_language(language) if language else None
 
                 def _transcribe_sync():
@@ -142,7 +146,9 @@ def create_whisper_stt(settings: Settings):
 
                 segments = await asyncio.to_thread(_transcribe_sync)
 
-                no_speech_prob_threshold = assert_given(self._settings.no_speech_prob)
+                no_speech_prob_threshold = _assert_given(
+                    self._settings.no_speech_prob, "no_speech_prob"
+                )
                 for segment in segments:
                     if (
                         no_speech_prob_threshold is not None
